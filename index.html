@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#100E12">
+<meta name="robots" content="noindex, nofollow">
+<title>PromCam</title>
+<link rel="preload" href="fonts/bodoni-moda-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/hanken-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Ikon garis (dipakai ulang dengan <use>) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9.6 9.4a2.5 2.5 0 014.8.9c0 1.7-2.4 2.1-2.4 3.7M12 16.8v.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12 11v5.5M12 7.8v.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5c.5 5 2.5 7 9.5 9.5-7 2.5-9 4.5-9.5 9.5-.5-5-2.5-7-9.5-9.5 7-2.5 9-4.5 9.5-9.5z" fill="currentColor"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5h3l1.6-2.3h6.8L17 8.5h3v10H4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="13.3" r="3.3" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+    <symbol id="i-roll" viewBox="0 0 24 24"><rect x="5" y="6" width="11" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4h5v2H8zM16 9h3v7h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 2.5L5.5 13.5h5.5L10 21.5l7.5-11H12z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 9.5V13l2.3 1.8M9.5 3h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 01-13 5.1M4.5 12a7.5 7.5 0 0113-5.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17.5 3.5v3.4h-3.4M6.5 20.5v-3.4h3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gallery" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5.5 12.5l4.2 4.2L18.5 7.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.2 12.3l2.6 2.6 5-5.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 11-2.2-5.3M19.5 4.5v4h-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.2-4.2M12 15l4.2-4.2M5 19.5h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 18h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7.5 18.5h-.8a4.2 4.2 0 01-.5-8.4 6 6 0 0111.6 1.4 3.6 3.6 0 01-.3 7h-.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 20.5v-7m-3 3l3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cloud-check" viewBox="0 0 24 24"><path d="M7.5 18.5h-.8a4.2 4.2 0 01-.5-8.4 6 6 0 0111.6 1.4 3.6 3.6 0 01-.3 7H7.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.5 14l2 2 3.5-3.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0119 0M5.5 12.2a9.5 9.5 0 0113 0M8.6 15.3a5 5 0 016.8 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="18.6" r="1.1" fill="currentColor"/><path d="M16.5 15.5l5 5m0-5l-5 5" stroke="var(--danger)" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5M12 14.3v2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 13.5h2M11 13.5h2M14 13.5h2M8 16.5h2M11 16.5h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-tone" viewBox="0 0 24 24"><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.6 2.6M15.4 15.4L18 18M18 6l-2.6 2.6M8.6 15.4L6 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-grain" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r=".9" fill="currentColor"/><circle cx="14.5" cy="8.5" r=".9" fill="currentColor"/><circle cx="12" cy="12.5" r=".9" fill="currentColor"/><circle cx="8.5" cy="15" r=".9" fill="currentColor"/><circle cx="15.5" cy="15" r=".9" fill="currentColor"/></symbol>
+    <symbol id="i-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12 3.5a8.5 8.5 0 010 17z" fill="currentColor"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v4l2.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 7v6M12 16.5v.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 18.5l1.2-3.3A7.5 7.5 0 1112 19.5a7.6 7.6 0 01-3.6-.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<main id="app">
+
+  <!-- Pembuka -->
+  <section class="screen screen-hero is-active" id="screen-landing" aria-labelledby="landing-title">
+    <div class="hero-bg" id="hero-bg" aria-hidden="true"></div>
+    <header class="topbar">
+      <svg class="spark-mark" aria-hidden="true"><use href="#i-spark"/></svg>
+      <span class="topbar-title"></span>
+      <button class="icon-btn" data-go="help" aria-label="Cara pakai"><svg><use href="#i-help"/></svg></button>
+    </header>
+    <div class="landing-body">
+      <p class="script" id="landing-invite">You’re invited</p>
+      <h1 class="display" id="landing-title"><span>Prom</span> <span>Night</span> <span>2026</span></h1>
+      <p class="landing-date" id="landing-date">2 – 3 November 2026</p>
+      <p class="landing-tagline" id="landing-tagline">Tangkap momen terbaik di malam yang tak terlupakan.</p>
+      <button class="btn btn-primary btn-lg" id="btn-open">Mulai Memotret <svg><use href="#i-arrow"/></svg></button>
+      <p class="pill"><svg aria-hidden="true"><use href="#i-camera"/></svg><span id="landing-frames">27 frame tersedia</span></p>
+      <p class="sim-badge" id="sim-badge" hidden>Mode simulasi: foto belum dikirim ke mana pun</p>
+    </div>
+    <p class="script script-foot" id="landing-closing">Satu malam. Seribu cerita.</p>
+  </section>
+
+  <!-- Sebelum acara: hitung mundur; kamera terbuka otomatis saat waktunya tiba -->
+  <section class="screen screen-hero" id="screen-countdown" aria-labelledby="cd-title">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <header class="topbar">
+      <button class="icon-btn" data-go="landing" aria-label="Kembali"><svg><use href="#i-back"/></svg></button>
+      <span class="topbar-title"></span>
+      <button class="icon-btn" data-go="help" aria-label="Cara pakai"><svg><use href="#i-help"/></svg></button>
+    </header>
+    <div class="center">
+      <p class="status-chip is-soon"><i></i>Segera dimulai</p>
+      <h2 class="display display-md" id="cd-title">Prom Night 2026</h2>
+      <div class="card count-card">
+        <p class="label">Acara dimulai dalam</p>
+        <div class="count-grid" id="cd-grid" role="timer" aria-live="off">
+          <div><b id="cd-d">00</b><small>Hari</small></div>
+          <div><b id="cd-h">00</b><small>Jam</small></div>
+          <div><b id="cd-m">00</b><small>Menit</small></div>
+          <div><b id="cd-s">00</b><small>Detik</small></div>
+        </div>
+      </div>
+      <div class="info-row date-card"><svg aria-hidden="true"><use href="#i-calendar"/></svg><span><b id="cd-date"></b><small>Kamera terbuka otomatis begitu waktunya tiba.</small></span></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-link" id="btn-cd-test" hidden>Coba kamera sekarang (mode uji)</button>
+    </div>
+  </section>
+
+  <!-- Beranda tamu: status acara, roll, tombol Ambil Foto, hitung mundur album -->
+  <section class="screen screen-hero" id="screen-hub" aria-labelledby="hub-title">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <header class="topbar">
+      <svg class="spark-mark" aria-hidden="true"><use href="#i-spark"/></svg>
+      <span class="topbar-title"></span>
+      <button class="icon-btn" data-go="help" aria-label="Cara pakai"><svg><use href="#i-help"/></svg></button>
+    </header>
+    <div class="hub-spacer"></div>
+    <div class="card hub-card">
+      <p class="status-chip" id="hub-chip"><i></i><span id="hub-chip-text">Berlangsung</span></p>
+      <h2 class="display display-md" id="hub-title">Prom Night 2026</h2>
+      <div class="stats">
+        <div><b id="hub-left">27</b><small>Frame tersisa</small></div>
+        <div><b id="hub-shots">0</b><small>Fotomu</small></div>
+        <div><b id="hub-sent">0</b><small>Terkirim</small></div>
+      </div>
+      <div class="hub-actions">
+        <button class="icon-btn icon-btn-lg" data-go="roll" aria-label="Lihat semua fotomu"><svg><use href="#i-gallery"/></svg></button>
+        <button class="btn btn-primary btn-lg" id="btn-hub-shoot"><svg><use href="#i-camera"/></svg>Ambil Foto</button>
+        <button class="icon-btn icon-btn-lg" data-go="presets" aria-label="Ganti gaya film"><svg><use href="#i-tone"/></svg></button>
+      </div>
+      <p class="hub-note" id="hub-note"></p>
+      <div class="reveal-mini">
+        <p class="label">Album dibuka dalam</p>
+        <p class="reveal-count" id="hub-reveal">–</p>
+        <small id="hub-reveal-date"></small>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cara pakai -->
+  <section class="screen" id="screen-help" aria-labelledby="help-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="landing" aria-label="Kembali"><svg><use href="#i-back"/></svg></button>
+      <h2 class="topbar-title" id="help-title">Cara Pakai</h2>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <ol class="steps">
+      <li><b>Pilih gaya film.</b> Empat gaya bisa diganti kapan saja.</li>
+      <li><b>Potret momenmu.</b> Setiap foto yang kamu gunakan memakai satu frame dari roll kamu.</li>
+      <li><b>Foto tersimpan di HP</b> lalu dikirim otomatis ke album panitia, juga saat sinyal sempat hilang.</li>
+      <li><b>Album dibuka</b> <span id="help-reveal">3 November 2026, pukul 12.00</span>.</li>
+    </ol>
+    <p class="note">Tanpa login dan tanpa data pribadi. Foto hanya masuk ke album panitia dan tidak dipublikasikan otomatis.</p>
+    <div class="actions">
+      <a class="btn btn-secondary" id="help-contact" href="#" target="_blank" rel="noopener" hidden><svg><use href="#i-chat"/></svg><span>Hubungi panitia</span></a>
+    </div>
+  </section>
+
+  <!-- Pilih gaya film -->
+  <section class="screen" id="screen-presets" aria-labelledby="presets-title">
+    <header class="topbar">
+      <button class="icon-btn" id="btn-presets-back" aria-label="Kembali"><svg><use href="#i-back"/></svg></button>
+      <span class="topbar-title"></span>
+      <button class="icon-btn" id="btn-preset-info" aria-label="Detail gaya film terpilih"><svg><use href="#i-info"/></svg></button>
+    </header>
+    <h2 class="title" id="presets-title">Pilih Gaya Film</h2>
+    <p class="lead">Pilih preset yang sesuai dengan suasana malam ini. Kamu bisa menggantinya kapan saja.</p>
+    <div class="preset-grid" id="preset-list" role="radiogroup" aria-labelledby="presets-title"></div>
+    <div class="actions">
+      <button class="btn btn-primary btn-lg" id="btn-to-camera">Lanjutkan <svg><use href="#i-arrow"/></svg></button>
+    </div>
+  </section>
+
+  <!-- Detail preset -->
+  <section class="screen" id="screen-preset" aria-labelledby="preset-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="presets" aria-label="Kembali"><svg><use href="#i-back"/></svg></button>
+      <h2 class="topbar-title">Detail Preset</h2>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <figure class="polaroid compare">
+      <div class="compare-stage" id="compare-stage">
+        <img id="preset-before" alt="">
+        <img id="preset-photo" class="compare-after" alt="">
+        <span class="compare-line" aria-hidden="true"></span>
+        <span class="compare-tag compare-tag-l" aria-hidden="true">Asli</span>
+        <span class="compare-tag compare-tag-r" id="preset-tag" aria-hidden="true"></span>
+        <input type="range" id="preset-slider" min="0" max="100" value="50" aria-label="Geser untuk membandingkan foto asli dan gaya film">
+      </div>
+      <figcaption id="preset-caption"></figcaption>
+    </figure>
+    <p class="compare-hint">Geser untuk bandingkan</p>
+    <h3 class="title title-left" id="preset-title"></h3>
+    <p class="lead lead-left" id="preset-blurb"></p>
+    <dl class="traits">
+      <div><dt><svg aria-hidden="true"><use href="#i-tone"/></svg>Tone</dt><dd id="trait-tone"></dd></div>
+      <div><dt><svg aria-hidden="true"><use href="#i-grain"/></svg>Grain</dt><dd id="trait-grain"></dd></div>
+      <div><dt><svg aria-hidden="true"><use href="#i-contrast"/></svg>Kontras</dt><dd id="trait-contrast"></dd></div>
+    </dl>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-preset-use">Gunakan preset ini</button>
+      <button class="btn btn-secondary" data-go="presets">Coba lainnya</button>
+    </div>
+  </section>
+
+  <!-- Kamera -->
+  <section class="screen screen-camera" id="screen-camera" aria-labelledby="camera-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="hub" aria-label="Kembali ke beranda"><svg><use href="#i-back"/></svg></button>
+      <h2 class="topbar-title" id="camera-title">Kamera</h2>
+      <p class="frame-badge" id="frame-counter" role="status">
+        <span class="frame-badge-row"><svg aria-hidden="true"><use href="#i-roll"/></svg><b class="frame-num" id="frames-left">27</b></span>
+        <small id="frames-label">frame tersisa</small>
+      </p>
+    </header>
+    <div class="viewfinder" id="viewfinder">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="preview-overlay" id="preview-overlay" aria-hidden="true"></div>
+      <div class="focus-marks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="countdown" id="countdown" aria-live="assertive" hidden></div>
+      <div class="flash" id="flash" aria-hidden="true"></div>
+      <div class="cam-loading" id="cam-loading">Membuka kamera…</div>
+    </div>
+    <p class="cam-note" id="queue-pill" hidden></p>
+    <p class="cam-note" id="roll-done" hidden>Roll kamu sudah habis. Terima kasih sudah memotret malam ini.</p>
+    <div class="preset-chips" id="preset-chips" role="radiogroup" aria-label="Gaya film"></div>
+    <div class="cam-controls">
+      <div class="cam-row cam-row-top">
+        <button class="icon-btn icon-btn-plain" id="btn-flash" aria-pressed="false" aria-label="Flash" hidden><svg><use href="#i-flash"/></svg></button>
+        <span class="icon-btn-spacer" id="flash-spacer"></span>
+        <button class="icon-btn toggle" id="btn-timer" aria-pressed="false" aria-label="Timer 3 detik"><svg><use href="#i-timer"/></svg><span>3s</span></button>
+      </div>
+      <div class="cam-row">
+        <button class="icon-btn icon-btn-lg" id="btn-roll" data-go="roll" aria-label="Lihat semua fotomu">
+          <img id="roll-thumb-img" alt="" hidden><svg id="roll-thumb-icon"><use href="#i-gallery"/></svg>
+        </button>
+        <button class="shutter" id="btn-shutter" aria-label="Ambil foto"><span></span></button>
+        <button class="icon-btn icon-btn-lg" id="btn-flip" aria-label="Ganti kamera depan/belakang" hidden><svg><use href="#i-flip"/></svg></button>
+        <span class="icon-btn-spacer icon-btn-lg" id="flip-spacer"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pratinjau -->
+  <section class="screen" id="screen-review" aria-labelledby="review-title">
+    <header class="topbar">
+      <span class="icon-btn-spacer"></span>
+      <h2 class="topbar-title" id="review-title">Pratinjau</h2>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <div class="review-stage">
+      <figure class="polaroid polaroid-review">
+        <img id="review-img" alt="Hasil foto dengan gaya film terpilih">
+        <figcaption id="review-meta"></figcaption>
+        <div class="processing" id="processing" hidden><span class="spinner"></span>Memproses…</div>
+      </figure>
+    </div>
+    <div class="actions actions-row">
+      <button class="btn btn-secondary btn-lg" id="btn-retake"><svg><use href="#i-retry"/></svg>Ulangi</button>
+      <button class="btn btn-primary btn-lg" id="btn-use"><svg><use href="#i-check"/></svg>Gunakan foto</button>
+    </div>
+  </section>
+
+  <!-- Foto tersimpan -->
+  <section class="screen" id="screen-saved" aria-labelledby="saved-title">
+    <div class="center">
+      <div class="badge-check" aria-hidden="true"><svg><use href="#i-check"/></svg><svg class="tw tw-1"><use href="#i-spark"/></svg><svg class="tw tw-2"><use href="#i-spark"/></svg></div>
+      <figure class="polaroid polaroid-tilt polaroid-saved">
+        <img id="saved-img" alt="Foto yang baru kamu ambil">
+        <figcaption id="saved-caption">Prom Night 2026 ♡</figcaption>
+      </figure>
+      <h2 class="title" id="saved-title">Foto tersimpan!</h2>
+      <p class="lead">Foto sudah disimpan di perangkat kamu dan akan dikirim ke album secara otomatis.</p>
+      <p class="sync-line" id="saved-sync" aria-live="polite"></p>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-again">Ambil foto lagi</button>
+      <button class="btn btn-secondary" data-go="roll"><svg><use href="#i-gallery"/></svg>Lihat di galeri</button>
+    </div>
+  </section>
+
+  <!-- Your Roll -->
+  <section class="screen" id="screen-roll" aria-labelledby="roll-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="hub" aria-label="Kembali ke beranda"><svg><use href="#i-back"/></svg></button>
+      <h2 class="topbar-title" id="roll-title">Your Roll</h2>
+      <span class="count-badge" id="roll-count">0 / 27</span>
+    </header>
+    <p class="lead">Lihat semua foto yang sudah kamu ambil.</p>
+    <div class="filmstrip"><ul class="roll-grid" id="roll-grid"></ul></div>
+    <button class="status-card" id="roll-status" data-go="album">
+      <svg class="status-icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+      <span><b id="roll-status-title"></b><small id="roll-status-sub"></small></span>
+      <svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg>
+    </button>
+  </section>
+
+  <!-- Detail satu foto: terkirim / belum terkirim / gagal -->
+  <section class="screen" id="screen-photo" aria-labelledby="photo-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="roll" aria-label="Kembali ke Your Roll"><svg><use href="#i-back"/></svg></button>
+      <span class="topbar-title"></span>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <div class="center">
+      <svg class="hero-icon" id="photo-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg>
+      <h2 class="title" id="photo-title"></h2>
+      <p class="lead" id="photo-text"></p>
+      <div class="photo-card"><img id="photo-img" alt=""></div>
+      <div class="info-row" id="photo-local">
+        <svg aria-hidden="true"><use href="#i-phone"/></svg>
+        <span><b>Tersimpan di HP</b><small>1 foto</small></span>
+        <svg class="ok" aria-hidden="true"><use href="#i-check-circle"/></svg>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-photo-retry"><svg><use href="#i-retry"/></svg>Coba kirim lagi</button>
+      <button class="btn btn-secondary" id="btn-photo-save"><svg><use href="#i-download"/></svg>Simpan ke HP saya</button>
+      <details class="tech" id="photo-details"><summary>Lihat detail <svg aria-hidden="true"><use href="#i-chev"/></svg></summary><dl id="photo-tech"></dl></details>
+    </div>
+  </section>
+
+  <!-- Status album -->
+  <section class="screen screen-hero" id="screen-album" aria-labelledby="album-title">
+    <div class="hero-bg hero-bg-soft" aria-hidden="true"></div>
+    <header class="topbar">
+      <button class="icon-btn" data-go="roll" aria-label="Kembali ke Your Roll"><svg><use href="#i-back"/></svg></button>
+      <h2 class="topbar-title" id="album-title">Album</h2>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <div class="center">
+      <div class="badge-check" aria-hidden="true"><svg><use href="#i-check"/></svg></div>
+      <h3 class="title" id="album-head">Tersimpan!</h3>
+      <p class="lead" id="album-text"></p>
+      <div class="sync-card">
+        <div class="info-row"><svg aria-hidden="true"><use href="#i-calendar"/></svg><span><b>Tersimpan di HP</b><small id="album-local">0 / 0</small></span><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+        <div class="info-row"><svg aria-hidden="true"><use href="#i-cloud-up"/></svg><span><b>Terkirim ke album</b><small id="album-sent">0 / 0</small></span><span class="spinner" id="album-spinner"></span><svg class="ok" id="album-sent-ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-album-open">Lihat Album <svg><use href="#i-arrow"/></svg></button>
+      <button class="btn btn-link" id="btn-album-save"><svg><use href="#i-download"/></svg>Simpan semua ke HP saya</button>
+    </div>
+  </section>
+
+  <!-- Album akan dibuka -->
+  <section class="screen screen-hero screen-reveal" id="screen-reveal" aria-labelledby="reveal-title">
+    <div class="hero-bg hero-bg-sample" aria-hidden="true"></div>
+    <header class="topbar">
+      <button class="icon-btn" data-go="album" aria-label="Kembali"><svg><use href="#i-back"/></svg></button>
+      <span class="topbar-title"></span>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <div class="center center-low">
+      <span class="lock-ring" aria-hidden="true"><svg><use href="#i-lock"/></svg></span>
+      <h2 class="title" id="reveal-title">Album akan dibuka</h2>
+      <p class="lead">Foto-foto kamu akan tersedia setelah acara berakhir.</p>
+      <p class="reveal-count" id="reveal-count"></p>
+      <div class="info-row date-card"><svg aria-hidden="true"><use href="#i-calendar"/></svg><span><b id="reveal-date"></b><small id="reveal-time"></small></span></div>
+    </div>
+    <p class="script script-foot" id="reveal-thanks">Terima kasih sudah menjadi bagian dari malam ini ♡</p>
+  </section>
+
+  <!-- Pesan (izin kamera, browser tidak didukung, dll.) -->
+  <section class="screen" id="screen-message" aria-labelledby="msg-title">
+    <header class="topbar">
+      <button class="icon-btn" data-go="landing" aria-label="Kembali ke awal"><svg><use href="#i-back"/></svg></button>
+      <span class="topbar-title"></span>
+      <span class="icon-btn-spacer"></span>
+    </header>
+    <div class="center center-top">
+      <svg class="hero-icon" aria-hidden="true"><use href="#i-camera"/></svg>
+      <h2 class="title" id="msg-title"></h2>
+      <div class="msg-body" id="msg-body"></div>
+    </div>
+    <div class="actions" id="msg-actions"></div>
+  </section>
+
+</main>
+
+<!-- Flash layar untuk kamera depan: putih penuh di atas semua elemen -->
+<div class="screen-flash" id="screen-flash" aria-hidden="true"></div>
+
+<!-- Cadangan: kamera bawaan HP -->
+<input type="file" id="native-capture" accept="image/*" capture="environment" hidden>
+
+<script src="js/config.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/upload.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
