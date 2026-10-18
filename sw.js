@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-var CACHE = 'promcam-shell-v6';
+var CACHE = 'promcam-shell-v7';
 var SHELL = [
   './',
   'index.html',
