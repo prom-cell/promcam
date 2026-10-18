@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-var CACHE = 'promcam-shell-v4';
+var CACHE = 'promcam-shell-v5';
 var SHELL = [
   './',
   'index.html',
@@ -17,6 +17,8 @@ var SHELL = [
   'js/presets.js',
   'js/upload.js',
   'js/camera.js',
+  'js/pipeline.js',
+  'js/render-worker.js',
   'js/app.js',
   'assets/hero.jpg',
   'assets/sample.jpg',
