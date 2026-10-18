@@ -403,8 +403,9 @@
     var cx = w / 2, cy = h / 2, inv = 1024 / (cx * cx + cy * cy);
 
     // Ukuran butir mengikuti ukuran foto (tampak sama di pratinjau 1080 px maupun file 12 MP), tetap bulat & halus.
-    var scale = (preset.grain.size || 1) * Math.max(w, h) / 2000;
-    var radius = Math.min(4, Math.max(0, Math.round((scale - 1) * 0.75)));
+    // Butir seperti v1: ukuran 1 = per piksel (paling halus); ukuran 2 = butir bulat ±2 px di foto 12 MP.
+    var size = preset.grain.size || 1;
+    var radius = size <= 1 ? 0 : Math.min(3, Math.max(0, Math.round((size - 1) * Math.max(w, h) / 4000)));
     var noise = gAmt ? getNoise(radius) : null, colIdx = null;
     var ox = (seed * 131) & (TILE - 1), oy = (seed * 71) & (TILE - 1);
     if (noise) {

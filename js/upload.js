@@ -163,6 +163,7 @@
         v: 1, k: cfg.eventCode || '', uploadId: item.uploadId, deviceId: deviceId(),
         preset: item.preset, takenAt: item.takenAt, w: item.width, h: item.height, data: parts[0]
       };
+      if (item.src) msg.src = item.src; // jalur kamera, dicatat di keterangan file Drive
       if (parts[1]) msg.data2 = parts[1]; // versi tanpa bingkai
       var body = JSON.stringify(msg);
       var ctrl = global.AbortController ? new AbortController() : null;
@@ -211,6 +212,7 @@
     item.status = 'sending'; item.attempts = (item.attempts || 0) + 1; emit(item);
     post(item).then(function (res) {
       item.status = 'sent'; item.ref = res.ref; item.simulated = !!res.simulated; item.sentAt = Date.now();
+      if (res.mode) item.mode = res.mode; // server yang menentukan: 'acara' atau 'uji'
       return save(item).then(function () { emit(item); });
     }, function (err) {
       var retryable = err.retry !== false;
@@ -234,7 +236,7 @@
     var first = data.ready ? (data.fallback || {}) : data;
     var item = {
       uploadId: uuid(), blob: first.blob || null, thumb: data.thumb || '', preset: data.preset,
-      takenAt: data.takenAt || new Date().toISOString(),
+      takenAt: data.takenAt || new Date().toISOString(), mode: data.mode || 'uji', src: data.src || '',
       width: first.width, height: first.height, status: data.ready ? 'processing' : 'queued',
       attempts: 0, createdAt: Date.now(), nextAt: 0
     };

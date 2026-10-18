@@ -22,8 +22,10 @@ window.PROMCAM_CONFIG = {
   // selama kosong, tombol "Lihat Album" menampilkan layar "Album akan dibuka".
   revealAt: '2026-11-03T12:00:00+07:00',
   albumUrl: '',
-  // Mode uji: kamera bisa dipakai di luar jadwal (untuk gladi). WAJIB false sebelum QR dibagikan.
-  testMode: true,
+  // Di luar jam acara (sebelum eventStart & sesudah eventEnd) kamera TETAP bisa dipakai sebagai uji coba:
+  // foto masuk folder 03_Karantina dan TIDAK mengurangi jatah rollSize. Di jam acara foto masuk album acara.
+  // Server menentukan folder dengan jam server (lihat Code.gs modeOtomatis). false = kamera hanya di jam acara.
+  trialOutsideEvent: true,
 
   // ---- Gaya film & bingkai ----
   // Gaya yang boleh dipakai tamu, urut tampil. Hapus id untuk menyembunyikan gaya tertentu.

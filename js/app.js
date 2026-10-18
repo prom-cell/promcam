@@ -83,14 +83,17 @@
     if (now >= END) return 'after';
     return 'live';
   }
-  function canShoot() { return phase() === 'live' || !!CFG.testMode; }
+  // Di luar jam acara kamera tetap bisa dipakai sebagai uji coba (foto ke folder terpisah, tidak memakai jatah).
+  var TRIAL = CFG.trialOutsideEvent !== false;
+  function canShoot() { return phase() === 'live' || TRIAL; }
+  function shotMode() { return phase() === 'live' ? 'acara' : 'uji'; }
 
   setText('reveal-date', fmtDate(REVEAL));
   setText('reveal-time', 'Pukul ' + fmtTime(REVEAL));
   setText('help-reveal', fmtDate(REVEAL) + ', pukul ' + fmtTime(REVEAL));
   setText('cd-date', fmtDate(START) + ' · ' + fmtTime(START));
   setText('hub-reveal-date', fmtDate(REVEAL) + ' · ' + fmtTime(REVEAL));
-  $('btn-cd-test').hidden = !CFG.testMode;
+  $('btn-cd-test').hidden = !TRIAL;
   ['cd-title', 'hub-title'].forEach(function (id) { setText(id, CFG.eventName); });
   (function () {
     var words = CFG.eventName.split(' ');
@@ -119,8 +122,10 @@
   /* ---------- Roll (jatah frame per HP) ---------- */
   var UNLIMITED = !(CFG.rollSize > 0);
 
-  function framesUsed() { return U.list().length; }
+  // Jatah roll hanya untuk foto di jam acara; foto uji coba (dan foto lama tanpa tanda) tidak dihitung.
+  function framesUsed() { return U.list().filter(function (i) { return i.mode === 'acara'; }).length; }
   function framesLeft() { return UNLIMITED ? Infinity : Math.max(0, CFG.rollSize - framesUsed()); }
+  function noFrames() { return shotMode() === 'acara' && framesLeft() === 0; }
 
   function updateRoll(animate) {
     var left = framesLeft();
@@ -130,11 +135,12 @@
       if (animate) { num.classList.remove('wind'); void num.offsetWidth; num.classList.add('wind'); }
     }
     $('landing-frames').textContent = UNLIMITED ? 'Frame tanpa batas' : left + ' frame tersedia';
-    $('frame-counter').classList.toggle('is-empty', left === 0);
+    var empty = noFrames();
+    $('frame-counter').classList.toggle('is-empty', empty);
     $('frame-counter').setAttribute('aria-label', UNLIMITED ? 'Frame tanpa batas' : left + ' frame tersisa');
-    $('roll-done').hidden = left !== 0;
-    $('preset-chips').hidden = left === 0;
-    if (!state.busy) $('btn-shutter').disabled = left === 0 || !C.isActive();
+    $('roll-done').hidden = !empty;
+    $('preset-chips').hidden = empty;
+    if (!state.busy) $('btn-shutter').disabled = empty || !C.isActive();
     var shots = U.list(), last = shots[shots.length - 1];
     $('roll-thumb-img').hidden = !last;
     $('roll-thumb-icon').style.display = last ? 'none' : '';
@@ -348,7 +354,7 @@
   $('viewfinder').addEventListener('click', cancelCountdown);
 
   $('btn-shutter').addEventListener('click', function () {
-    if (state.busy || framesLeft() === 0) return;
+    if (state.busy || noFrames()) return;
     state.busy = true; $('btn-shutter').disabled = true;
     if (!state.timer) return shoot();
     var n = 3, el = $('countdown');
@@ -382,11 +388,13 @@
       return g.still.then(null, function () { return null; }).then(function (still) {
         clearTimeout(hold); $('hold-pill').hidden = true;
         fl.off(); // senter mati segera setelah foto didapat
-        return { frame: g.frame, still: still };
+        var lc = C.lastCapture(), ss = C.streamSize() || {};
+        var src = still ? 'sensor ' + (lc.sensor || '') : 'video ' + ss.width + 'x' + ss.height;
+        return { frame: g.frame, still: still, src: src };
       });
     }).then(function (r) {
       state.source = 'stream';
-      startShot(r.frame, r.still, mirror);
+      startShot(r.frame, r.still, mirror, r.src);
     }, function (e) {
       $('hold-pill').hidden = true;
       state.busy = false; updateRoll(false);
@@ -422,7 +430,7 @@
   }
 
   /* frame: canvas frame video (sudah dipotong sesuai bingkai). still: {bitmap, region} foto sensor penuh, atau null. */
-  function startShot(frame, still, mirror) {
+  function startShot(frame, still, mirror, srcLabel) {
     var takenAt = new Date();
     var opts = { dateStamp: CFG.dateStamp, date: takenAt, seed: (takenAt.getTime() / 997) & 0xffff };
     var frameJob = { source: frame, region: { x: 0, y: 0, w: frame.width, h: frame.height }, mirror: false };
@@ -431,6 +439,7 @@
     // Pratinjau dibuat dari foto yang SAMA dengan file akhir (sebelum sumbernya dikirim ke worker).
     var pv = regionCanvas(src, PREVIEW_EDGE);
     var shot = { id: ++shotSeq, preset: state.preset, takenAt: takenAt.toISOString(), photoAspect: pv.width / pv.height,
+                 mode: shotMode(), src: srcLabel || '',
                  photoWidth: Math.round(src.region.w * full), photoHeight: Math.round(src.region.h * full), done: false };
     var prev = state.shot;
     if (prev && prev.url && !prev.kept) URL.revokeObjectURL(prev.url);
@@ -498,7 +507,7 @@
   /* ---------- Gunakan foto → tersimpan di HP → dikirim di latar belakang ---------- */
   $('btn-use').addEventListener('click', function () {
     var s = state.shot; if (!s || !s.previewReady || s.kept) return;
-    if (framesLeft() === 0) return go('roll');
+    if (noFrames()) return go('roll');
     $('btn-use').disabled = true;
     s.kept = true;
     // Biasanya pratinjau sudah siap; bila belum (sepersekian detik), tunggu sebentar.
@@ -510,7 +519,7 @@
     U.enqueue({
       ready: s.final.then(function (r) { return { blob: r.blob, width: r.width, height: r.height, blobPlain: r.blobPlain }; }),
       fallback: { blob: s.previewBlob, width: s.width, height: s.height },
-      thumb: s.thumb, preset: s.preset, takenAt: s.takenAt
+      thumb: s.thumb, preset: s.preset, takenAt: s.takenAt, mode: s.mode, src: s.src
     }).then(function (item) {
       state.savedId = item.uploadId;
       if (RENDER.saved && state.screen === 'saved') RENDER.saved();
@@ -550,11 +559,10 @@
     line.className = 'sync-line ' + s[0];
     line.innerHTML = (s[1] ? '<svg aria-hidden="true"><use href="#' + s[1] + '"/></svg>' : '<span class="spinner"></span>') + '<span></span>';
     line.lastChild.textContent = s[2];
-    var left = framesLeft();
-    $('btn-again').textContent = left === 0 ? 'Lihat semua foto' : 'Ambil foto lagi';
+    $('btn-again').textContent = noFrames() ? 'Lihat semua foto' : 'Ambil foto lagi';
   };
 
-  $('btn-again').addEventListener('click', function () { go(framesLeft() === 0 ? 'roll' : 'camera'); });
+  $('btn-again').addEventListener('click', function () { go(noFrames() ? 'roll' : 'camera'); });
 
   /* ---------- Simpan ke HP ---------- */
   function fileName(shot) {
@@ -606,7 +614,7 @@
 
   RENDER.roll = function () {
     var c = counts(), grid = $('roll-grid');
-    $('roll-count').textContent = UNLIMITED ? String(c.total) : c.total + ' / ' + CFG.rollSize;
+    $('roll-count').textContent = UNLIMITED ? String(c.total) : framesUsed() + ' / ' + CFG.rollSize;
     grid.textContent = '';
     if (!c.total) {
       var empty = document.createElement('li');
@@ -627,10 +635,14 @@
       badge.className = 'roll-badge ' + BADGE[key][0];
       badge.innerHTML = '<svg aria-hidden="true"><use href="#' + BADGE[key][1] + '"/></svg>';
       li.appendChild(btn); li.appendChild(badge);
+      if (s.mode !== 'acara') {
+        var tag = document.createElement('span'); tag.className = 'roll-tag'; tag.textContent = 'Uji coba';
+        li.appendChild(tag);
+      }
       grid.appendChild(li);
     });
     var left = framesLeft();
-    if (left > 0) {
+    if (!noFrames()) {
       var more = document.createElement('li'), mb = document.createElement('button');
       more.className = 'roll-item roll-more';
       mb.type = 'button';
@@ -751,7 +763,7 @@
       e.target.value = '';
       state.busy = true;
       state.source = 'native';
-      startShot(c, Promise.resolve(null), false);
+      startShot(c, null, false, 'kamera-hp ' + img.naturalWidth + 'x' + img.naturalHeight);
     };
     img.onerror = function () { showMessage('File tidak bisa dibuka', '<p>Coba ambil foto lagi.</p>', [backAction]); };
     img.src = URL.createObjectURL(f);
@@ -770,22 +782,23 @@
   });
 
   function enter() {
-    if (phase() === 'before' && !CFG.testMode) return go('countdown');
+    if (phase() === 'before') return go('countdown');
     go(state.joined ? 'hub' : 'presets');
   }
 
   /* ---------- Beranda tamu ---------- */
   RENDER.hub = function () {
     var c = counts(), left = framesLeft(), ph = phase(), chip = $('hub-chip');
-    var look = ph === 'live' ? ['is-live', 'Berlangsung'] : ph === 'after' ? ['is-done', 'Acara selesai']
-      : CFG.testMode ? ['is-live', 'Berlangsung'] : ['is-soon', 'Segera dimulai'];
+    var look = ph === 'live' ? ['is-live', 'Berlangsung'] : ph === 'after' ? ['is-done', 'Acara selesai'] : ['is-soon', 'Segera dimulai'];
     chip.className = 'status-chip ' + look[0];
     $('hub-chip-text').textContent = look[1];
     $('hub-left').textContent = UNLIMITED ? '∞' : String(left);
     $('hub-shots').textContent = String(c.total);
     $('hub-sent').textContent = String(c.sent);
-    $('btn-hub-shoot').disabled = !canShoot() || left === 0;
-    $('hub-note').textContent = ph === 'after' && !CFG.testMode ? 'Kamera sudah ditutup. Roll kamu tetap bisa dibuka dan disimpan.'
+    $('btn-hub-shoot').disabled = !canShoot() || noFrames();
+    $('hub-note').textContent = ph === 'before' && TRIAL ? 'Acara dimulai ' + fmtDate(START) + ' pukul ' + fmtTime(START) + '. Coba kamera sekarang; foto uji coba tidak mengurangi jatah ' + CFG.rollSize + ' frame.'
+      : ph === 'after' && TRIAL ? 'Acara sudah selesai. Kamera masih bisa dipakai, tapi foto baru tidak masuk album acara.'
+      : ph === 'after' ? 'Kamera sudah ditutup. Roll kamu tetap bisa dibuka dan disimpan.'
       : left === 0 ? 'Roll kamu sudah habis. Terima kasih sudah memotret!'
       : c.waiting ? c.waiting + ' foto menunggu sinyal untuk dikirim.'
       : 'Gaya film: ' + P.get(state.preset).name;
@@ -833,7 +846,7 @@
     if (U.isSimulation()) $('sim-badge').hidden = false;
     updateQueueNote();
     updateRoll(false);
-    if (state.joined && state.screen === 'landing') go(phase() === 'before' && !CFG.testMode ? 'countdown' : 'hub');
+    if (state.joined && state.screen === 'landing') go(phase() === 'before' ? 'countdown' : 'hub');
   });
 
   /* Service worker: menyimpan file aplikasi di HP agar bisa dibuka ulang saat sinyal buruk.
