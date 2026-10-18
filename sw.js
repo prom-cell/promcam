@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-var CACHE = 'promcam-shell-v8';
+var CACHE = 'promcam-shell-v9';
 var SHELL = [
   './',
   'index.html',
@@ -32,7 +32,10 @@ var SHELL = [
 ];
 
 self.addEventListener('install', function (event) {
-  event.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  // cache: 'reload' → ambil langsung dari server, bukan salinan lama di cache HTTP browser (GitHub Pages: 10 menit).
+  event.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'reload' }); }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (event) {
@@ -47,7 +50,7 @@ self.addEventListener('fetch', function (event) {
   event.respondWith(caches.open(CACHE).then(function (cache) {
     // ignoreSearch: '/?simfail=1' dan '/#k=…' tetap memakai index.html yang tersimpan.
     return cache.match(req, { ignoreSearch: true }).then(function (cached) {
-      var fresh = fetch(req).then(function (res) {
+      var fresh = fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {
         if (res && res.ok) cache.put(req, res.clone());
         return res;
       }).catch(function () { return cached; });
