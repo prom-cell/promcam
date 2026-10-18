@@ -350,18 +350,43 @@
     return lut;
   }
 
-  /* Ubin noise 512×512 (−1..1) dibuat sekali. Jauh lebih cepat daripada hash per piksel;
-   * pengulangan 512 px tidak terlihat pada grain acak. Posisi ubin digeser per foto (seed). */
-  var TILE = 512, noiseTile = null;
-  function getNoise() {
-    if (noiseTile) return noiseTile;
-    noiseTile = new Float32Array(TILE * TILE);
-    var s = 0x9E3779B9 | 0;
-    for (var i = 0; i < noiseTile.length; i++) {
+  /* Ubin noise 512×512 dibuat sekali per ukuran butir dan diulang (pengulangan 512 px tidak terlihat pada grain acak).
+   * radius 0 = butir per piksel (halus). radius > 0 = noise yang diburamkan lalu dinormalkan: butir bulat
+   * menggumpal seperti film asli, BUKAN kotak-kotak. Posisi ubin digeser per foto (seed). */
+  var TILE = 512, tiles = {};
+  function getNoise(radius) {
+    if (tiles[radius]) return tiles[radius];
+    var n = TILE * TILE, t = new Float32Array(n), s = 0x9E3779B9 | 0, i;
+    for (i = 0; i < n; i++) {
       s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
-      noiseTile[i] = ((s >>> 0) / 4294967295) * 2 - 1;
+      t[i] = ((s >>> 0) / 4294967295) * 2 - 1;
     }
-    return noiseTile;
+    if (radius > 0) {
+      var tmp = new Float32Array(n), div = 1 / (radius * 2 + 1), M = TILE - 1;
+      for (var pass = 0; pass < 2; pass++) {
+        for (var y = 0; y < TILE; y++) {          // horizontal (ubin menyambung di tepi)
+          var row = y * TILE, sum = 0, k;
+          for (k = -radius; k <= radius; k++) sum += t[row + (k & M)];
+          for (var x = 0; x < TILE; x++) {
+            tmp[row + x] = sum * div;
+            sum += t[row + ((x + radius + 1) & M)] - t[row + ((x - radius) & M)];
+          }
+        }
+        for (var cx = 0; cx < TILE; cx++) {       // vertikal
+          var sum2 = 0, k2;
+          for (k2 = -radius; k2 <= radius; k2++) sum2 += tmp[(k2 & M) * TILE + cx];
+          for (var cy = 0; cy < TILE; cy++) {
+            t[cy * TILE + cx] = sum2 * div;
+            sum2 += tmp[((cy + radius + 1) & M) * TILE + cx] - tmp[((cy - radius) & M) * TILE + cx];
+          }
+        }
+      }
+      // Normalkan agar kekuatan grain sama dengan butir per piksel (simpangan baku noise seragam = 0,577)
+      var sq = 0; for (i = 0; i < n; i++) sq += t[i] * t[i];
+      var g = 0.5774 / Math.sqrt(sq / n); for (i = 0; i < n; i++) t[i] *= g;
+    }
+    tiles[radius] = t;
+    return t;
   }
 
   /* Memproses ImageData di tempat. Mengembalikan waktu proses (ms). */
@@ -377,13 +402,14 @@
     var seed = opts.seed == null ? 7 : opts.seed;
     var cx = w / 2, cy = h / 2, inv = 1024 / (cx * cx + cy * cy);
 
-    // Ukuran butir grain mengikuti ukuran foto: tampak sama di pratinjau maupun file 12 MP.
-    var cell = Math.max(1, Math.round((preset.grain.size || 1) * Math.max(w, h) / 2000));
-    var noise = gAmt ? getNoise() : null, colIdx = null;
+    // Ukuran butir mengikuti ukuran foto (tampak sama di pratinjau 1080 px maupun file 12 MP), tetap bulat & halus.
+    var scale = (preset.grain.size || 1) * Math.max(w, h) / 2000;
+    var radius = Math.min(4, Math.max(0, Math.round((scale - 1) * 0.75)));
+    var noise = gAmt ? getNoise(radius) : null, colIdx = null;
     var ox = (seed * 131) & (TILE - 1), oy = (seed * 71) & (TILE - 1);
     if (noise) {
       colIdx = new Int32Array(w);
-      for (var cxi = 0; cxi < w; cxi++) colIdx[cxi] = (((cxi / cell) | 0) + ox) & (TILE - 1);
+      for (var cxi = 0; cxi < w; cxi++) colIdx[cxi] = (cxi + ox) & (TILE - 1);
     }
 
     // Warna luber (VHS/Y2K): merah bergeser ke kanan, biru ke kiri.
@@ -396,7 +422,7 @@
     for (var y = 0; y < h; y++) {
       var dy2 = (y - cy) * (y - cy);
       var rowBase = y * w;
-      var nRow = noise ? (((((y / cell) | 0) + oy) & (TILE - 1)) * TILE) : 0;
+      var nRow = noise ? (((y + oy) & (TILE - 1)) * TILE) : 0;
       var lineK = slPeriod && (y % slPeriod) >= slPeriod / 2 ? slDark : 1;
       if (cs) {
         for (var k0 = 0; k0 < w; k0++) { var j = (rowBase + k0) << 2; rowR[k0] = d[j]; rowB[k0] = d[j + 2]; }

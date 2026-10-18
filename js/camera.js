@@ -153,11 +153,13 @@
 
   /* ---------- Foto resolusi penuh (ImageCapture.takePhoto, umumnya Chrome Android) ----------
    * Stream video HP biasanya 1–2 MP; takePhoto() memakai sensor penuh (mis. 12 MP).
-   * Agar tombol jepret terasa instan:
-   *   - ImageCapture & kemampuan foto disiapkan SEKALI saat kamera dibuka (bukan setiap jepret);
-   *   - grab() langsung mengembalikan frame video saat tombol ditekan, sementara takePhoto() berjalan di latar.
-   * Hasil takePhoto dipakai hanya bila orientasinya sama dengan video dan memberi piksel lebih banyak. */
-  var STILL_TIMEOUT_MS = 5000, STILL_MAX_W = 4608, last = { source: 'video', width: 0, height: 0 };
+   * - ImageCapture & kemampuan foto disiapkan SEKALI saat kamera dibuka (bukan setiap jepret).
+   * - takePhoto() dimulai TEPAT saat tombol ditekan dan aplikasi menunggunya (tamu diminta menahan HP sebentar),
+   *   karena foto yang diambil setelah HP bergerak menjadi blur. Pengolahan berat tetap di latar.
+   * - Hasilnya dipakai bila orientasinya sama dengan video dan tidak jauh lebih kecil dari frame video:
+   *   foto sensor (dengan pengolahan ISP kamera) jauh lebih tajam daripada frame video beresolusi sama.
+   * - Lebar foto dibatasi 4096 px (≈12 MP): sensor 48/50 MP memberi mode binning yang lebih bersih & cepat. */
+  var STILL_TIMEOUT_MS = 3000, STILL_MAX_W = 4096, last = { source: 'video', width: 0, height: 0 };
 
   function prepareStill() {
     ic = null; photoCaps = null;
@@ -187,7 +189,7 @@
     var nh = w / aspect; return { x: x, y: y + (h - nh) / 2, w: w, h: nh };
   }
 
-  /* Jepret: frame video SEKARANG (instan) + foto sensor penuh di latar (bila wantStill).
+  /* Jepret: frame video SEKARANG (cadangan) + foto sensor penuh yang dimulai saat itu juga (bila wantStill).
    * → { frame: canvas, still: Promise<{bitmap, region}|null> }. Region = potongan yang sama dengan bingkai bidik. */
   function grab(maxEdge, mirror, aspect, wantStill) {
     if (!video || !video.videoWidth) throw new Error('Kamera belum siap');
@@ -202,7 +204,7 @@
       r = centerCrop(r.x, r.y, r.w, r.h, aspect || vw / vh);
       var gain = (Math.min(r.w, maxEdge * r.w / Math.max(r.w, r.h)) * Math.min(r.h, maxEdge * r.h / Math.max(r.w, r.h))) /
                  (frame.width * frame.height);
-      if (!sameOrientation || gain < 1.2) { if (bmp.close) bmp.close(); return null; }
+      if (!sameOrientation || gain < 0.7) { if (bmp.close) bmp.close(); return null; }
       last = { source: 'photo', width: Math.round(r.w), height: Math.round(r.h), sensor: bmp.width + 'x' + bmp.height };
       return { bitmap: bmp, region: r };
     });

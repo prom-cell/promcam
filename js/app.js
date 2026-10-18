@@ -365,7 +365,8 @@
     if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) { /* tidak didukung */ }
   }
 
-  /* Jepret instan: frame saat tombol ditekan langsung jadi pratinjau; foto resolusi penuh diolah di latar. */
+  /* Jepret: foto sensor penuh diambil TEPAT saat tombol ditekan (HP ditahan sebentar, biasanya < 1 detik),
+   * flash mati begitu foto didapat, lalu pratinjau langsung tampil. Pengolahan 12 MP berjalan di latar. */
   function shoot() {
     var mirror = C.facing() === 'user' && CFG.mirrorFrontSaved;
     var vf = $('viewfinder'), aspect = vf.clientWidth / vf.clientHeight || CFG.frameAspect;
@@ -375,13 +376,19 @@
       var wantStill = fl.mode !== 'screen' && PIPE.pending() < 2;
       var g;
       try { g = C.grab(CFG.maxEdge, mirror, aspect, wantStill); } catch (e) { fl.off(); throw e; }
-      if (fl.mode === 'torch') g.still.then(fl.off, fl.off); else fl.off();
-      return g;
-    }).then(function (g) {
       flashFx();
+      if (fl.mode !== 'torch') fl.off();
+      var hold = setTimeout(function () { $('hold-pill').hidden = false; }, 200);
+      return g.still.then(null, function () { return null; }).then(function (still) {
+        clearTimeout(hold); $('hold-pill').hidden = true;
+        fl.off(); // senter mati segera setelah foto didapat
+        return { frame: g.frame, still: still };
+      });
+    }).then(function (r) {
       state.source = 'stream';
-      startShot(g.frame, g.still, mirror);
+      startShot(r.frame, r.still, mirror);
     }, function (e) {
+      $('hold-pill').hidden = true;
       state.busy = false; updateRoll(false);
       cameraError(e);
     });
@@ -402,22 +409,39 @@
     return name + ' · ' + (mp >= 1 ? mp.toFixed(mp >= 10 ? 0 : 1) : '<1') + ' MP';
   }
 
-  /* frame: canvas hasil jepret (sudah dipotong sesuai bingkai). still: Promise<{bitmap, region}|null>. */
+  /* Gambar potongan sumber (foto sensor atau frame) ke kanvas berukuran maksimal edge. */
+  function regionCanvas(src, edge) {
+    var r = src.region, k = Math.min(1, edge / Math.max(r.w, r.h));
+    var c = document.createElement('canvas');
+    c.width = Math.round(r.w * k); c.height = Math.round(r.h * k);
+    var x = c.getContext('2d', { willReadFrequently: true });
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    if (src.mirror) { x.translate(c.width, 0); x.scale(-1, 1); }
+    x.drawImage(src.source, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  /* frame: canvas frame video (sudah dipotong sesuai bingkai). still: {bitmap, region} foto sensor penuh, atau null. */
   function startShot(frame, still, mirror) {
     var takenAt = new Date();
     var opts = { dateStamp: CFG.dateStamp, date: takenAt, seed: (takenAt.getTime() / 997) & 0xffff };
-    var shot = { id: ++shotSeq, preset: state.preset, takenAt: takenAt.toISOString(), photoAspect: frame.width / frame.height,
-                 photoWidth: frame.width, photoHeight: frame.height, done: false };
+    var frameJob = { source: frame, region: { x: 0, y: 0, w: frame.width, h: frame.height }, mirror: false };
+    var src = still ? { source: still.bitmap, region: still.region, mirror: !!mirror } : frameJob;
+    var full = Math.min(1, CFG.maxEdge / Math.max(src.region.w, src.region.h));
+    // Pratinjau dibuat dari foto yang SAMA dengan file akhir (sebelum sumbernya dikirim ke worker).
+    var pv = regionCanvas(src, PREVIEW_EDGE);
+    var shot = { id: ++shotSeq, preset: state.preset, takenAt: takenAt.toISOString(), photoAspect: pv.width / pv.height,
+                 photoWidth: Math.round(src.region.w * full), photoHeight: Math.round(src.region.h * full), done: false };
     var prev = state.shot;
     if (prev && prev.url && !prev.kept) URL.revokeObjectURL(prev.url);
     state.shot = shot;
     var img = $('review-img'), live = $('review-live'), pol = document.querySelector('.polaroid-review');
     var preset = P.get(shot.preset);
 
-    // 0) Seketika: frame hasil jepret ditampilkan dengan tampilan jendela bidik (filter CSS gaya film).
-    var k = Math.min(1, 720 / Math.max(frame.width, frame.height));
-    live.width = Math.round(frame.width * k); live.height = Math.round(frame.height * k);
-    live.getContext('2d').drawImage(frame, 0, 0, live.width, live.height);
+    // 0) Seketika: foto hasil jepret ditampilkan dengan tampilan jendela bidik (filter CSS gaya film).
+    var k = Math.min(1, 720 / Math.max(pv.width, pv.height));
+    live.width = Math.round(pv.width * k); live.height = Math.round(pv.height * k);
+    live.getContext('2d').drawImage(pv, 0, 0, live.width, live.height);
     live.style.filter = (preset.preview && preset.preview.filter) || '';
     live.hidden = false; img.hidden = true; img.removeAttribute('src'); img.classList.remove('fade-in');
     pol.classList.remove('is-baked');
@@ -429,7 +453,6 @@
     // 1) Pratinjau berbingkai (±1080 px) di halaman, menggantikan tampilan sementara.
     shot.previewReady = new Promise(function (resolve, reject) {
       setTimeout(function () {
-        var pv = U.scaleToCanvas(frame, frame.width, frame.height, PREVIEW_EDGE);
         try { P.applyToCanvas(pv, shot.preset, opts); } catch (e) { /* gagal: tampil apa adanya */ }
         P.applyFrame(pv, CFG.frame).then(function (framed) {
           shot.thumb = makeThumb(framed);
@@ -457,12 +480,8 @@
     shot.previewReady.catch(function () {});
 
     // 2) Foto akhir resolusi penuh di latar (Web Worker bila ada). Gagal → frame video yang sama.
-    var frameJob = { source: frame, region: { x: 0, y: 0, w: frame.width, h: frame.height } };
-    shot.final = still.then(function (s) {
-      var src = s ? { source: s.bitmap, region: s.region } : frameJob;
-      return PIPE.render({ source: src.source, region: src.region, maxEdge: CFG.maxEdge, mirror: !!s && mirror,
-        presetId: shot.preset, opts: opts, frame: CFG.frame, enc: encCfg(), fallback: frameJob, both: CFG.saveBothVersions !== false });
-    });
+    shot.final = PIPE.render({ source: src.source, region: src.region, maxEdge: CFG.maxEdge, mirror: src.mirror,
+      presetId: shot.preset, opts: opts, frame: CFG.frame, enc: encCfg(), fallback: frameJob, both: CFG.saveBothVersions !== false });
     shot.final.then(function (r) {
       shot.done = true; shot.finalBlob = r.blob; shot.via = r.via;
       shot.photoWidth = r.photoWidth; shot.photoHeight = r.photoHeight;
