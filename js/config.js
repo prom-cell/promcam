@@ -46,7 +46,7 @@ window.PROMCAM_CONFIG = {
   // ---- Server ----
   // URL Web App Apps Script "PromCam Server" (deployment v1, 17 Okt 2026). Kosong = MODE SIMULASI.
   // Kode acara TIDAK ditulis di sini; ia ikut di QR (#k=…) agar tidak tersimpan di repo publik.
-  endpoint: 'https://script.google.com/macros/s/AKfycbxVCyKswor57yy4xfZmUlc8RFZFDEH6wOnswVs_kUxu9FFHzognDQbMAeL1y06bpNR3cQ/exec',
+  endpoint: 'https://script.google.com/macros/s/AKfycbw-hIGxhITFCXh4j9P_w3GL3FFFlz5yUWW5red3TySMHKKvP5EsaMnYwDk66hxOd9x_jA/exec',
 
   // Kode acara dibaca dari QR: https://…/promcam/#k=KODE (disimpan di HP setelah pemindaian pertama).
   eventCode: (function () {
