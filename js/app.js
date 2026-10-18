@@ -94,6 +94,7 @@
   setText('cd-date', fmtDate(START) + ' · ' + fmtTime(START));
   setText('hub-reveal-date', fmtDate(REVEAL) + ' · ' + fmtTime(REVEAL));
   $('btn-cd-test').hidden = !TRIAL;
+  if (!TRIAL) setText('cd-note', 'Kamera terbuka otomatis begitu waktunya tiba.');
   ['cd-title', 'hub-title'].forEach(function (id) { setText(id, CFG.eventName); });
   (function () {
     var words = CFG.eventName.split(' ');
