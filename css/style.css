@@ -381,6 +381,10 @@ svg { width: 22px; height: 22px; flex: none; }
 .compare-hint { margin: 0 0 12px; text-align: center; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 
 /* Foto yang bingkai polaroidnya sudah tercetak di file: tampilkan apa adanya, tanpa kertas tambahan */
+.polaroid .review-live { display: block; width: 100%; aspect-ratio: 3 / 4; background: #1b1714; }
+.polaroid .review-live[hidden], #review-img[hidden] { display: none; }
+#review-img.fade-in { animation: reviewFade .22s ease-out; }
+@keyframes reviewFade { from { opacity: .6; } to { opacity: 1; } }
 .polaroid.is-baked { padding: 0; background: transparent; }
 .polaroid.is-baked img { aspect-ratio: auto; object-fit: contain; background: transparent; }
 .polaroid.is-baked figcaption { display: none; }
