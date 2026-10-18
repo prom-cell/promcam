@@ -6,6 +6,7 @@
   'use strict';
 
   var video = null, stream = null, facing = 'environment';
+  var ic = null, photoCaps = null, stillBusy = false; // ImageCapture yang disiapkan sekali per kamera
 
   function supported() {
     return !!(global.isSecureContext !== false && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -37,7 +38,7 @@
 
   function stop() {
     if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
-    stream = null;
+    stream = null; ic = null; photoCaps = null;
     if (video) video.srcObject = null;
     releaseAwake();
   }
@@ -96,11 +97,36 @@
       var track = s.getVideoTracks()[0];
       var settings = track && track.getSettings ? track.getSettings() : {};
       if (settings.facingMode) facing = settings.facingMode === 'user' ? 'user' : 'environment';
-      return attach(s);
+      return attach(s).then(function (info) {
+        prepareStill();
+        if (!global.ImageCapture) upgradeStream(); // mis. Safari iPhone: coba stream 4K bila lebih tajam
+        return info;
+      });
     }).catch(function (err) {
       err.kind = errorKind(err);
       throw err;
     });
+  }
+
+  /* Piksel yang tersisa setelah dipotong ke bingkai potret 3:4. */
+  function cropArea(w, h) { var a = 0.75; return w / h > a ? h * h * a : w * w / a; }
+
+  /* Browser tanpa takePhoto (Safari iPhone) hanya memakai stream video. Permintaan 4:3 sering diberi
+   * 1440×1920; stream 4K 16:9 dipotong ke 3:4 memberi ±6 MP. Coba 4K, simpan hanya bila lebih tajam. */
+  function upgradeStream() {
+    var t = videoTrack(), v = video;
+    if (!t || !t.applyConstraints || !v || !v.videoWidth) return;
+    var before = cropArea(v.videoWidth, v.videoHeight);
+    if (before >= 5e6) return;
+    var s0 = t.getSettings ? t.getSettings() : {};
+    t.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 } }).then(function () {
+      return new Promise(function (r) { setTimeout(r, 600); });
+    }).then(function () {
+      if (videoTrack() !== t) return;
+      if (cropArea(v.videoWidth, v.videoHeight) < before && s0.width) {
+        return t.applyConstraints({ width: { ideal: s0.width }, height: { ideal: s0.height } });
+      }
+    }).catch(function () { /* tidak didukung: tetap pakai stream awal */ });
   }
 
   function countCameras() {
@@ -122,32 +148,37 @@
   /* Mengambil frame dari stream (resolusi asli), dipotong sesuai bingkai bidik. mirror=true membalik horizontal file akhir. */
   function captureFrame(maxEdge, mirror, aspect) {
     if (!video || !video.videoWidth) throw new Error('Kamera belum siap');
-    return global.PromUpload.scaleToCanvas(video, video.videoWidth, video.videoHeight, maxEdge, mirror, aspect);
+    return global.PromUpload.scaleToCanvas(video, video.videoWidth, video.videoHeight, maxEdge, mirror, aspect, true);
   }
 
   /* ---------- Foto resolusi penuh (ImageCapture.takePhoto, umumnya Chrome Android) ----------
    * Stream video HP biasanya 1–2 MP; takePhoto() memakai sensor penuh (mis. 12 MP).
-   * Hasilnya dipakai hanya bila (a) orientasinya sama dengan video dan (b) lebih besar dari frame video.
-   * Selain itu, atau bila lebih dari STILL_TIMEOUT_MS, dipakai frame video yang sudah diambil saat tombol ditekan. */
-  var STILL_TIMEOUT_MS = 4000, STILL_MAX_W = 4096, last = { source: 'video', width: 0, height: 0 };
+   * Agar tombol jepret terasa instan:
+   *   - ImageCapture & kemampuan foto disiapkan SEKALI saat kamera dibuka (bukan setiap jepret);
+   *   - grab() langsung mengembalikan frame video saat tombol ditekan, sementara takePhoto() berjalan di latar.
+   * Hasil takePhoto dipakai hanya bila orientasinya sama dengan video dan memberi piksel lebih banyak. */
+  var STILL_TIMEOUT_MS = 5000, STILL_MAX_W = 4608, last = { source: 'video', width: 0, height: 0 };
+
+  function prepareStill() {
+    ic = null; photoCaps = null;
+    var t = videoTrack();
+    if (!t || !global.ImageCapture) return;
+    try { ic = new global.ImageCapture(t); } catch (e) { ic = null; return; }
+    var mine = ic;
+    ic.getPhotoCapabilities().then(function (c) { if (ic === mine) photoCaps = c; }, function () { /* tidak didukung */ });
+  }
 
   function takeStill() {
-    var t = videoTrack();
-    if (!t || !global.ImageCapture || !global.createImageBitmap) return Promise.resolve(null);
-    var ic, lost = false;
-    try { ic = new global.ImageCapture(t); } catch (e) { return Promise.resolve(null); }
-    var job = ic.getPhotoCapabilities().then(function (caps) {
-      var max = caps && caps.imageWidth && caps.imageWidth.max;
-      // Batasi ±12 MP agar HP kelas menengah tidak kehabisan memori pada sensor 50 MP.
-      return max ? ic.takePhoto({ imageWidth: Math.min(max, STILL_MAX_W) }).catch(function () { return ic.takePhoto(); }) : ic.takePhoto();
-    }).then(function (blob) {
-      return global.createImageBitmap(blob);
-    }).then(function (bmp) {
-      if (lost && bmp.close) { bmp.close(); return null; }
-      return bmp;
-    });
+    if (!ic || stillBusy || !global.createImageBitmap) return Promise.resolve(null);
+    stillBusy = true;
+    var mine = ic, lost = false, max = photoCaps && photoCaps.imageWidth && photoCaps.imageWidth.max;
+    var shot = (max ? mine.takePhoto({ imageWidth: Math.min(max, STILL_MAX_W) }) : mine.takePhoto())
+      .catch(function () { return mine.takePhoto(); })
+      .then(function (blob) { return global.createImageBitmap(blob); })
+      .then(function (bmp) { if (lost && bmp.close) { bmp.close(); return null; } return bmp; });
     var timeout = new Promise(function (r) { setTimeout(function () { lost = true; r(null); }, STILL_TIMEOUT_MS); });
-    return Promise.race([job, timeout]).catch(function () { return null; });
+    return Promise.race([shot, timeout]).catch(function () { return null; })
+      .then(function (v) { stillBusy = false; return v; });
   }
 
   /* Potongan pusat dengan rasio tertentu. */
@@ -156,35 +187,26 @@
     var nh = w / aspect; return { x: x, y: y + (h - nh) / 2, w: w, h: nh };
   }
 
-  function drawRegion(src, r, maxEdge, mirror) {
-    var scale = Math.min(1, maxEdge / Math.max(r.w, r.h));
-    var c = document.createElement('canvas');
-    c.width = Math.round(r.w * scale); c.height = Math.round(r.h * scale);
-    var ctx = c.getContext('2d', { willReadFrequently: true });
-    if (mirror) { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
-    return c;
-  }
-
-  /* Ambil foto terbaik yang tersedia → Promise<canvas>, dipotong persis seperti bingkai bidik. */
-  function capture(maxEdge, mirror, aspect) {
-    if (!video || !video.videoWidth) return Promise.reject(new Error('Kamera belum siap'));
+  /* Jepret: frame video SEKARANG (instan) + foto sensor penuh di latar (bila wantStill).
+   * → { frame: canvas, still: Promise<{bitmap, region}|null> }. Region = potongan yang sama dengan bingkai bidik. */
+  function grab(maxEdge, mirror, aspect, wantStill) {
+    if (!video || !video.videoWidth) throw new Error('Kamera belum siap');
     var vw = video.videoWidth, vh = video.videoHeight;
-    var frame = captureFrame(maxEdge, mirror, aspect); // momen tombol ditekan; cadangan
+    var frame = captureFrame(maxEdge, mirror, aspect);
     last = { source: 'video', width: frame.width, height: frame.height };
-    return takeStill().then(function (bmp) {
-      if (!bmp) return frame;
+    var still = !wantStill ? Promise.resolve(null) : takeStill().then(function (bmp) {
+      if (!bmp) return null;
       var sameOrientation = (bmp.width >= bmp.height) === (vw >= vh);
-      // Samakan sudut pandang dengan pratinjau: potong foto ke rasio video dulu, lalu ke rasio bingkai.
+      // Samakan sudut pandang dengan pratinjau: potong ke rasio video dulu, lalu ke rasio bingkai.
       var r = centerCrop(0, 0, bmp.width, bmp.height, vw / vh);
       r = centerCrop(r.x, r.y, r.w, r.h, aspect || vw / vh);
-      var gain = (r.w * r.h) / (frame.width * frame.height);
-      if (!sameOrientation || gain < 1.2) { if (bmp.close) bmp.close(); return frame; }
-      var c = drawRegion(bmp, r, maxEdge, mirror);
-      if (bmp.close) bmp.close();
-      last = { source: 'photo', width: c.width, height: c.height };
-      return c;
+      var gain = (Math.min(r.w, maxEdge * r.w / Math.max(r.w, r.h)) * Math.min(r.h, maxEdge * r.h / Math.max(r.w, r.h))) /
+                 (frame.width * frame.height);
+      if (!sameOrientation || gain < 1.2) { if (bmp.close) bmp.close(); return null; }
+      last = { source: 'photo', width: Math.round(r.w), height: Math.round(r.h), sensor: bmp.width + 'x' + bmp.height };
+      return { bitmap: bmp, region: r };
     });
+    return { frame: frame, still: still };
   }
 
   global.PromCamera = {
@@ -194,7 +216,7 @@
     flip: flip,
     countCameras: countCameras,
     captureFrame: captureFrame,
-    capture: capture,
+    grab: grab,
     lastCapture: function () { return last; },
     streamSize: function () { return video ? { width: video.videoWidth, height: video.videoHeight } : null; },
     hasTorch: hasTorch,

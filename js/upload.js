@@ -15,7 +15,8 @@
   /* Menggambar sumber (video/gambar/canvas) ke canvas baru, sisi terpanjang <= maxEdge.
    * aspect (lebar/tinggi, opsional): potong bagian tengah agar sama dengan bingkai bidik di layar,
    * sehingga foto akhir = apa yang terlihat saat membidik. */
-  function scaleToCanvas(source, srcW, srcH, maxEdge, mirror, aspect) {
+  /* gpu=true: kanvas tidak akan dibaca pikselnya di halaman (lebih cepat untuk frame video 4K). */
+  function scaleToCanvas(source, srcW, srcH, maxEdge, mirror, aspect, gpu) {
     var sx = 0, sy = 0, sw = srcW, sh = srcH;
     if (aspect) {
       if (srcW / srcH > aspect) { sw = Math.round(srcH * aspect); sx = Math.round((srcW - sw) / 2); }
@@ -25,7 +26,8 @@
     var w = Math.round(sw * scale), h = Math.round(sh * scale);
     var c = document.createElement('canvas');
     c.width = w; c.height = h;
-    var ctx = c.getContext('2d', { willReadFrequently: true });
+    var ctx = c.getContext('2d', gpu ? undefined : { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h);
     return c;
@@ -155,13 +157,17 @@
 
   function post(item) {
     if (!cfg.endpoint) return simulate();
-    return blobToBase64(item.blob).then(function (data) {
-      var body = JSON.stringify({
+    var plain = item.blobPlain ? blobToBase64(item.blobPlain) : Promise.resolve(null);
+    return Promise.all([blobToBase64(item.blob), plain]).then(function (parts) {
+      var msg = {
         v: 1, k: cfg.eventCode || '', uploadId: item.uploadId, deviceId: deviceId(),
-        preset: item.preset, takenAt: item.takenAt, w: item.width, h: item.height, data: data
-      });
+        preset: item.preset, takenAt: item.takenAt, w: item.width, h: item.height, data: parts[0]
+      };
+      if (parts[1]) msg.data2 = parts[1]; // versi tanpa bingkai
+      var body = JSON.stringify(msg);
       var ctrl = global.AbortController ? new AbortController() : null;
-      var limitMs = (cfg.timeoutSec || 45) * 1000 + Math.ceil(item.blob.size / MB) * 10000;
+      var size = item.blob.size + (item.blobPlain ? item.blobPlain.size : 0);
+      var limitMs = (cfg.timeoutSec || 45) * 1000 + Math.ceil(size / MB) * 10000;
       var to = setTimeout(function () { if (ctrl) ctrl.abort(); }, limitMs);
       // text/plain = permintaan "sederhana" (tanpa preflight CORS). Jangan tambahkan header lain.
       return fetch(cfg.endpoint, {
@@ -218,13 +224,31 @@
     }).then(function () { sending = false; pump(); });
   }
 
+  /* Masukkan foto ke roll + antrean.
+   * data.blob  = foto siap kirim, ATAU
+   * data.ready = Promise<{blob,width,height}> foto resolusi penuh yang masih diproses di latar, dengan
+   * data.fallback = {blob,width,height} (pratinjau) yang langsung disimpan agar foto tidak hilang
+   * bila halaman tertutup sebelum proses selesai.
+   * Promise yang dikembalikan selesai SEGERA (item sudah ada di roll); pengiriman menunggu foto akhir. */
   function enqueue(data) {
+    var first = data.ready ? (data.fallback || {}) : data;
     var item = {
-      uploadId: uuid(), blob: data.blob, thumb: data.thumb || '', preset: data.preset,
+      uploadId: uuid(), blob: first.blob || null, thumb: data.thumb || '', preset: data.preset,
       takenAt: data.takenAt || new Date().toISOString(),
-      width: data.width, height: data.height, status: 'queued', attempts: 0, createdAt: Date.now(), nextAt: 0
+      width: first.width, height: first.height, status: data.ready ? 'processing' : 'queued',
+      attempts: 0, createdAt: Date.now(), nextAt: 0
     };
-    return save(item).then(function () { emit(item); pump(); return item; });
+    var saved = save(item).then(function () { emit(item); });
+    if (!data.ready) return saved.then(function () { pump(); return item; });
+    Promise.resolve(data.ready).then(function (r) {
+      if (r && r.blob) { item.blob = r.blob; item.width = r.width; item.height = r.height; item.full = true; item.blobPlain = r.blobPlain || null; }
+    }, function () { /* gagal diproses: kirim pratinjau yang sudah tersimpan */ }).then(function () {
+      return saved;
+    }).then(function () {
+      item.status = 'queued';
+      return save(item);
+    }).then(function () { emit(item); pump(); });
+    return saved.then(function () { return item; });
   }
 
   /* Coba lagi item yang gagal permanen (mis. tamu menekan "Coba kirim lagi"). */
@@ -257,6 +281,7 @@
     }).then(function (items) {
       (items || []).forEach(function (it) {
         if (it.status === 'sending') it.status = 'retrying';
+        if (it.status === 'processing') it.status = 'queued'; // halaman tertutup saat memproses: kirim pratinjau tersimpan
         it.nextAt = 0; memory[it.uploadId] = it;
       });
       // Minta browser tidak menghapus roll saat ruang penyimpanan HP menipis (bila didukung).

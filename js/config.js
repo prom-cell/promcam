@@ -27,8 +27,8 @@ window.PROMCAM_CONFIG = {
 
   // ---- Gaya film & bingkai ----
   // Gaya yang boleh dipakai tamu, urut tampil. Hapus id untuk menyembunyikan gaya tertentu.
-  // party, golden, disposable, midnight, natural, softglow, mono, cinema
-  enabledPresets: ['party', 'golden', 'softglow', 'cinema', 'disposable', 'midnight', 'mono', 'natural'],
+  // party, digicam, y2k, disposable, golden, softglow, dreamy, sunset, nineties, vintage, instant, finefilm, cinema, midnight, vhs, mono, booth, natural
+  enabledPresets: ['party', 'digicam', 'y2k', 'disposable', 'golden', 'softglow', 'dreamy', 'sunset', 'nineties', 'vintage', 'instant', 'finefilm', 'cinema', 'midnight', 'vhs', 'mono', 'booth', 'natural'],
   // Bingkai yang ikut tersimpan di file foto: 'polaroid' (kertas putih + tulisan) atau 'none' (foto polos).
   frame: { style: 'polaroid', caption: 'Prom Night 2026', hashtag: '#promnight2026' },
 
@@ -39,7 +39,7 @@ window.PROMCAM_CONFIG = {
 
   // ---- Gambar (panitia boleh mengganti file dengan foto asli, nama file sama) ----
   heroImage: 'assets/hero.jpg',      // latar halaman pembuka, potret, ±1080×1920
-  sampleImage: 'assets/sample.jpg',  // foto contoh untuk thumbnail preset (foto panitia: kolam malam, 1080×1435)
+  sampleImage: 'assets/sample.jpg',  // foto contoh untuk thumbnail preset (foto panitia: potret malam, 960×1280)
 
   // ---- Server ----
   // URL Web App Apps Script "PromCam Server" (deployment v1, 17 Okt 2026). Kosong = MODE SIMULASI.
@@ -58,18 +58,22 @@ window.PROMCAM_CONFIG = {
   // ---- Foto ----
   // Disetel untuk kualitas maksimum: Drive panitia 350 GB untuk ±50 tamu, jadi ruang bukan batasan.
   // Batas yang tersisa adalah kuota data & lama unggah di HP tamu (lihat TEST-REPORT.md).
-  maxEdge: 4096,             // sisi terpanjang (px) ≈ 12 MP pada 3:4. Chrome Android memakai sensor penuh (takePhoto);
+  maxEdge: 4608,             // sisi terpanjang (px) ≈ 16 MP pada 3:4 (HP 12 MP memakai resolusi aslinya). Chrome Android memakai sensor penuh (takePhoto);
                              // browser lain memakai stream video setinggi yang diizinkan kamera.
   frameAspect: 3 / 4,        // bingkai bidik & foto akhir: potret 3:4
-  jpegQuality: 0.92,         // kualitas awal
-  softMaxMB: 8,              // di atas ini dikompres ulang ke jpegQualityFallback
-  jpegQualityFallback: 0.85,
-  hardMaxMB: 12,             // batas keras (server menerima s.d. 15 MB); di atas ini diperkecil ke shrinkEdge
-  shrinkEdge: 3600,
+  jpegQuality: 0.95,         // kualitas awal (tinggi: detail & grain tetap halus)
+  softMaxMB: 10,             // di atas ini dikompres ulang ke jpegQualityFallback
+  jpegQualityFallback: 0.9,
+  hardMaxMB: 14,             // batas keras (server menerima s.d. 15 MB); di atas ini diperkecil ke shrinkEdge
+  shrinkEdge: 4096,
 
   // Roll: jumlah frame per HP, seperti kamera sekali pakai (0 = tanpa batas).
   // Dihitung saat tamu menekan "Gunakan foto"; Ulangi tidak memakai frame.
   rollSize: 100,
+
+  // Simpan 2 versi tiap foto: dengan bingkai polaroid & tanpa bingkai (dikirim dalam satu unggahan,
+  // di Drive masuk subfolder "Polaroid" dan "Tanpa bingkai"). false = hanya versi polaroid.
+  saveBothVersions: true,
 
   // Flash (disetel ulang di Tahap 5 setelah uji di HP). Waktu tunggu agar eksposur kamera menyesuaikan.
   screenFlashMs: 450,   // layar putih untuk kamera depan

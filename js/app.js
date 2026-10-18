@@ -5,7 +5,7 @@
   'use strict';
 
   var CFG = window.PROMCAM_CONFIG;
-  var P = window.PromPresets, U = window.PromUpload, C = window.PromCamera;
+  var P = window.PromPresets, U = window.PromUpload, C = window.PromCamera, PIPE = window.PromPipeline;
   var $ = function (id) { return document.getElementById(id); };
 
   function load(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
@@ -20,7 +20,7 @@
     busy: false,
     counting: null,
     source: 'stream',   // 'stream' (kamera web) atau 'native' (kamera bawaan HP)
-    shot: null,         // hasil terakhir: { blob, url, thumb, width, height, preset, takenAt }
+    shot: null,         // hasil terakhir: { previewBlob, url, thumb, width, height, preset, takenAt, final: Promise }
     savedId: null,      // uploadId foto yang ditampilkan di layar "Foto tersimpan"
     photoId: null       // uploadId foto yang dibuka di layar detail
   };
@@ -320,18 +320,18 @@
   });
 
   /* Menyalakan flash, menunggu eksposur kamera menyesuaikan, menjalankan fn, lalu mematikan flash. */
-  function withFlash(fn) {
+  /* Nyalakan flash, tunggu eksposur menyesuaikan, jalankan fn; flash dimatikan saat release() dipanggil. */
+  function flashOn() {
     var mode = state.flash ? flashMode() : null;
-    if (!mode) return Promise.resolve().then(fn);
+    if (!mode) return Promise.resolve({ mode: null, off: function () {} });
     var on = mode === 'screen' ? Promise.resolve($('screen-flash').classList.add('on')) : C.setTorch(true);
     var wait = mode === 'screen' ? CFG.screenFlashMs : CFG.torchFlashMs;
-    function off() {
+    var off = function () {
       if (mode === 'screen') $('screen-flash').classList.remove('on');
       else C.setTorch(false);
-    }
-    return on.then(function () {
-      return new Promise(function (r) { setTimeout(r, wait); });
-    }).then(fn).then(function (v) { off(); return v; }, function (e) { off(); throw e; });
+    };
+    return on.then(function () { return new Promise(function (r) { setTimeout(r, wait); }); })
+      .then(function () { return { mode: mode, off: off }; });
   }
 
   function setTimer(on) {
@@ -365,15 +365,22 @@
     if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) { /* tidak didukung */ }
   }
 
+  /* Jepret instan: frame saat tombol ditekan langsung jadi pratinjau; foto resolusi penuh diolah di latar. */
   function shoot() {
     var mirror = C.facing() === 'user' && CFG.mirrorFrontSaved;
     var vf = $('viewfinder'), aspect = vf.clientWidth / vf.clientHeight || CFG.frameAspect;
-    withFlash(function () {
-      return C.capture(CFG.maxEdge, mirror, aspect);
-    }).then(function (canvas) {
+    flashOn().then(function (fl) {
+      // Flash layar (kamera depan): pakai frame saja agar layar putih tidak menyala lama.
+      // Maksimal 2 foto resolusi penuh diproses bersamaan agar memori HP aman.
+      var wantStill = fl.mode !== 'screen' && PIPE.pending() < 2;
+      var g;
+      try { g = C.grab(CFG.maxEdge, mirror, aspect, wantStill); } catch (e) { fl.off(); throw e; }
+      if (fl.mode === 'torch') g.still.then(fl.off, fl.off); else fl.off();
+      return g;
+    }).then(function (g) {
       flashFx();
       state.source = 'stream';
-      processAndReview(canvas);
+      startShot(g.frame, g.still, mirror);
     }, function (e) {
       state.busy = false; updateRoll(false);
       cameraError(e);
@@ -381,33 +388,87 @@
   }
 
   /* ---------- Pratinjau ---------- */
-  function processAndReview(canvas) {
+  var PREVIEW_EDGE = 1080, shotSeq = 0, BAKED = !!(CFG.frame && CFG.frame.style === 'polaroid'); // cukup tajam untuk layar HP (±360 pt × 3)
+
+  function encCfg() {
+    return { jpegQuality: CFG.jpegQuality, jpegQualityFallback: CFG.jpegQualityFallback,
+             softMaxMB: CFG.softMaxMB, hardMaxMB: CFG.hardMaxMB, shrinkEdge: CFG.shrinkEdge };
+  }
+
+  function metaText(shot) {
+    var name = P.get(shot.preset).name;
+    if (!shot.done) return name + ' · menyiapkan resolusi penuh';
+    var mp = (shot.photoWidth * shot.photoHeight) / 1e6;
+    return name + ' · ' + (mp >= 1 ? mp.toFixed(mp >= 10 ? 0 : 1) : '<1') + ' MP';
+  }
+
+  /* frame: canvas hasil jepret (sudah dipotong sesuai bingkai). still: Promise<{bitmap, region}|null>. */
+  function startShot(frame, still, mirror) {
     var takenAt = new Date();
-    if (state.shot && state.shot.url && !state.shot.kept) URL.revokeObjectURL(state.shot.url);
-    state.shot = null;
-    $('review-img').removeAttribute('src');
-    $('processing').hidden = false;
-    $('review-meta').textContent = '';
-    $('btn-use').disabled = true;
+    var opts = { dateStamp: CFG.dateStamp, date: takenAt, seed: (takenAt.getTime() / 997) & 0xffff };
+    var shot = { id: ++shotSeq, preset: state.preset, takenAt: takenAt.toISOString(), photoAspect: frame.width / frame.height,
+                 photoWidth: frame.width, photoHeight: frame.height, done: false };
+    var prev = state.shot;
+    if (prev && prev.url && !prev.kept) URL.revokeObjectURL(prev.url);
+    state.shot = shot;
+    var img = $('review-img'), live = $('review-live'), pol = document.querySelector('.polaroid-review');
+    var preset = P.get(shot.preset);
+
+    // 0) Seketika: frame hasil jepret ditampilkan dengan tampilan jendela bidik (filter CSS gaya film).
+    var k = Math.min(1, 720 / Math.max(frame.width, frame.height));
+    live.width = Math.round(frame.width * k); live.height = Math.round(frame.height * k);
+    live.getContext('2d').drawImage(frame, 0, 0, live.width, live.height);
+    live.style.filter = (preset.preview && preset.preview.filter) || '';
+    live.hidden = false; img.hidden = true; img.removeAttribute('src'); img.classList.remove('fade-in');
+    pol.classList.remove('is-baked');
+    $('processing').hidden = true;
+    $('review-meta').textContent = preset.name;
+    $('btn-use').disabled = false;
     go('review');
-    setTimeout(function () {
-      try { P.applyToCanvas(canvas, state.preset, { dateStamp: CFG.dateStamp, date: takenAt }); }
-      catch (e) { /* gagal menerapkan preset: foto tetap dipakai apa adanya */ }
-      var photoAspect = canvas.width / canvas.height;
-      P.applyFrame(canvas, CFG.frame).then(function (framed) {
-        return U.encode(framed, CFG);
-      }).then(function (enc) {
-        state.shot = { blob: enc.blob, url: URL.createObjectURL(enc.blob), thumb: makeThumb(enc.canvas),
-          width: enc.width, height: enc.height, photoAspect: photoAspect, preset: state.preset, takenAt: takenAt.toISOString() };
-        $('review-img').src = state.shot.url;
-        $('processing').hidden = true;
-        $('btn-use').disabled = false;
-        $('review-meta').textContent = P.get(state.preset).name;
-      }).catch(function (e) {
-        $('processing').hidden = true;
-        $('review-meta').textContent = 'Gagal memproses. Ulangi.';
-      }).then(function () { state.busy = false; updateRoll(false); });
-    }, 40);
+
+    // 1) Pratinjau berbingkai (±1080 px) di halaman, menggantikan tampilan sementara.
+    shot.previewReady = new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        var pv = U.scaleToCanvas(frame, frame.width, frame.height, PREVIEW_EDGE);
+        try { P.applyToCanvas(pv, shot.preset, opts); } catch (e) { /* gagal: tampil apa adanya */ }
+        P.applyFrame(pv, CFG.frame).then(function (framed) {
+          shot.thumb = makeThumb(framed);
+          shot.width = framed.width; shot.height = framed.height;
+          return P.encode(framed, { jpegQuality: 0.88, softMaxMB: 5, hardMaxMB: 8, shrinkEdge: PREVIEW_EDGE });
+        }).then(function (enc) {
+          shot.previewBlob = enc.blob;
+          shot.url = URL.createObjectURL(enc.blob);
+          resolve(shot);
+          if (state.shot !== shot) return;
+          img.onload = function () {
+            if (state.shot !== shot) return;
+            if (BAKED) pol.classList.add('is-baked');
+            img.hidden = false; live.hidden = true; img.classList.add('fade-in');
+          };
+          img.src = shot.url;
+        }).catch(function (e) {
+          reject(e);
+          if (state.shot !== shot) return;
+          $('review-meta').textContent = 'Gagal memproses. Ulangi.';
+          $('btn-use').disabled = true;
+        }).then(function () { state.busy = false; updateRoll(false); });
+      }, 16);
+    });
+    shot.previewReady.catch(function () {});
+
+    // 2) Foto akhir resolusi penuh di latar (Web Worker bila ada). Gagal → frame video yang sama.
+    var frameJob = { source: frame, region: { x: 0, y: 0, w: frame.width, h: frame.height } };
+    shot.final = still.then(function (s) {
+      var src = s ? { source: s.bitmap, region: s.region } : frameJob;
+      return PIPE.render({ source: src.source, region: src.region, maxEdge: CFG.maxEdge, mirror: !!s && mirror,
+        presetId: shot.preset, opts: opts, frame: CFG.frame, enc: encCfg(), fallback: frameJob, both: CFG.saveBothVersions !== false });
+    });
+    shot.final.then(function (r) {
+      shot.done = true; shot.finalBlob = r.blob; shot.via = r.via;
+      shot.photoWidth = r.photoWidth; shot.photoHeight = r.photoHeight;
+      shot.width = r.width; shot.height = r.height;
+      if (state.shot === shot && state.screen === 'review' && shot.url) $('review-meta').textContent = metaText(shot);
+    }, function () { /* pratinjau tetap dipakai */ });
   }
 
   $('btn-retake').addEventListener('click', function () {
@@ -417,20 +478,31 @@
 
   /* ---------- Gunakan foto → tersimpan di HP → dikirim di latar belakang ---------- */
   $('btn-use').addEventListener('click', function () {
-    var s = state.shot; if (!s) return;
+    var s = state.shot; if (!s || !s.previewReady || s.kept) return;
     if (framesLeft() === 0) return go('roll');
     $('btn-use').disabled = true;
-    U.enqueue({ blob: s.blob, thumb: s.thumb, preset: s.preset, takenAt: s.takenAt, width: s.width, height: s.height })
-      .then(function (item) {
-        s.kept = true;
-        state.savedId = item.uploadId;
-        $('saved-img').src = s.url;
-        var pol = document.querySelector('.polaroid-saved');
-        pol.classList.remove('develop'); void pol.offsetWidth; pol.classList.add('develop');
-        updateRoll(true);
-        go('saved');
-      });
+    s.kept = true;
+    // Biasanya pratinjau sudah siap; bila belum (sepersekian detik), tunggu sebentar.
+    s.previewReady.then(function () { useShot(s); }, function () { s.kept = false; });
   });
+
+  function useShot(s) {
+    // Langsung ke layar "Tersimpan". Pratinjau disimpan dulu, lalu diganti foto resolusi penuh begitu siap.
+    U.enqueue({
+      ready: s.final.then(function (r) { return { blob: r.blob, width: r.width, height: r.height, blobPlain: r.blobPlain }; }),
+      fallback: { blob: s.previewBlob, width: s.width, height: s.height },
+      thumb: s.thumb, preset: s.preset, takenAt: s.takenAt
+    }).then(function (item) {
+      state.savedId = item.uploadId;
+      if (RENDER.saved && state.screen === 'saved') RENDER.saved();
+    });
+    $('saved-img').src = s.url;
+    var pol = document.querySelector('.polaroid-saved');
+    pol.classList.remove('develop'); void pol.offsetWidth; pol.classList.add('develop');
+    state.savedId = null;
+    updateRoll(true);
+    go('saved');
+  }
 
   function find(id) {
     var all = U.list();
@@ -439,6 +511,7 @@
   }
 
   var SYNC = {
+    processing: ['', null, 'Menyiapkan foto resolusi penuh…'],
     sent: ['is-ok', 'i-check-circle', 'Terkirim ke album'],
     simulated: ['', 'i-info', 'Mode simulasi: foto belum dikirim ke mana pun'],
     sending: ['', null, 'Mengirim ke album…'],
@@ -448,7 +521,11 @@
 
   RENDER.saved = function () {
     var item = find(state.savedId), line = $('saved-sync');
-    if (!item) { line.textContent = ''; return; }
+    if (!item) {
+      line.className = 'sync-line';
+      line.innerHTML = '<span class="spinner"></span><span>Menyimpan…</span>';
+      return;
+    }
     var key = item.status === 'sent' ? (item.simulated ? 'simulated' : 'sent') : (item.status === 'queued' ? 'sending' : item.status);
     var s = SYNC[key] || SYNC.sending;
     line.className = 'sync-line ' + s[0];
@@ -464,7 +541,7 @@
   function fileName(shot) {
     var d = new Date(shot.takenAt), p = function (n) { return (n < 10 ? '0' : '') + n; };
     return 'promnight-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
-      p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.jpg'; // jam lokal HP (WIB)
+      p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (shot.suffix || '') + '.jpg'; // jam lokal HP (WIB)
   }
 
   function download(shot) {
@@ -475,7 +552,20 @@
   }
 
   /* Satu atau banyak foto: pakai menu Bagikan bawaan HP bila ada (bisa "Simpan Gambar"), selain itu unduh. */
+  /* Satu foto bisa punya 2 versi: polaroid (blob) dan tanpa bingkai (blobPlain). Keduanya disimpan. */
+  function versions(shots) {
+    var out = [];
+    shots.forEach(function (s) {
+      if (!s || !s.blob) return;
+      out.push({ blob: s.blob, takenAt: s.takenAt, suffix: s.blobPlain ? '-polaroid' : '' });
+      if (s.blobPlain) out.push({ blob: s.blobPlain, takenAt: s.takenAt, suffix: '' });
+    });
+    return out;
+  }
+
   function saveToPhone(shots) {
+    shots = versions(shots);
+    if (!shots.length) return;
     var files = [];
     try { files = shots.map(function (s) { return new File([s.blob], fileName(s), { type: 'image/jpeg' }); }); }
     catch (e) { files = []; }
@@ -565,6 +655,8 @@
       view = ['i-wifi-off', 'Tidak dapat mengirim', failText(s.lastError)];
     } else if (s.status === 'sending') {
       view = ['i-cloud-up', 'Sedang dikirim', 'Foto ini sedang dikirim ke album.'];
+    } else if (s.status === 'processing') {
+      view = ['i-cloud-up', 'Sedang diproses', 'Foto resolusi penuh sedang disiapkan, lalu dikirim otomatis.'];
     } else {
       view = ['i-cloud-up', 'Belum terkirim', 'Foto ini masih menunggu koneksi internet dan akan dikirim otomatis.'];
     }
@@ -572,10 +664,11 @@
     $('photo-title').textContent = view[1];
     $('photo-text').textContent = view[2];
     $('photo-img').src = s.thumb || '';
-    $('btn-photo-retry').hidden = s.status === 'sent' || s.status === 'sending';
+    $('btn-photo-retry').hidden = s.status === 'sent' || s.status === 'sending' || s.status === 'processing';
     var taken = new Date(s.takenAt);
     var rows = [
-      ['Status', { sent: 'Terkirim', failed: 'Gagal', sending: 'Sedang dikirim', retrying: 'Menunggu sinyal', queued: 'Dalam antrean' }[s.status] || s.status],
+      ['Status', { sent: 'Terkirim', failed: 'Gagal', sending: 'Sedang dikirim', retrying: 'Menunggu sinyal', queued: 'Dalam antrean', processing: 'Diproses' }[s.status] || s.status],
+      ['Ukuran', s.width && s.height ? s.width + ' × ' + s.height + ' px' : '–'],
       ['Percobaan kirim', String(s.attempts || 0)],
       ['Diambil', taken.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })],
       ['Gaya film', (P.get(s.preset) || {}).name || s.preset]
@@ -621,6 +714,9 @@
       : c.waiting + (navigator.onLine ? ' foto sedang dikirim di latar belakang.' : ' foto menunggu sinyal.');
   }
 
+  // Siapkan pengolah foto latar (Web Worker) lebih awal agar jepretan pertama tidak menunggu.
+  window.addEventListener('load', function () { setTimeout(function () { PIPE.init(); }, 1200); });
+
   U.onChange(function () {
     updateQueueNote();
     if (RENDER[state.screen] && state.screen !== 'preset') RENDER[state.screen]();
@@ -636,7 +732,7 @@
       e.target.value = '';
       state.busy = true;
       state.source = 'native';
-      processAndReview(c);
+      startShot(c, Promise.resolve(null), false);
     };
     img.onerror = function () { showMessage('File tidak bisa dibuka', '<p>Coba ambil foto lagi.</p>', [backAction]); };
     img.src = URL.createObjectURL(f);
@@ -663,7 +759,7 @@
   RENDER.hub = function () {
     var c = counts(), left = framesLeft(), ph = phase(), chip = $('hub-chip');
     var look = ph === 'live' ? ['is-live', 'Berlangsung'] : ph === 'after' ? ['is-done', 'Acara selesai']
-      : CFG.testMode ? ['is-test', 'Mode uji'] : ['is-soon', 'Segera dimulai'];
+      : CFG.testMode ? ['is-live', 'Berlangsung'] : ['is-soon', 'Segera dimulai'];
     chip.className = 'status-chip ' + look[0];
     $('hub-chip-text').textContent = look[1];
     $('hub-left').textContent = UNLIMITED ? '∞' : String(left);
@@ -710,7 +806,7 @@
   /* ---------- Mulai ---------- */
   setTimer(state.timer);
   buildPresetUI();
-  if (CFG.frame && CFG.frame.style === 'polaroid') {
+  if (BAKED) {
     // Bingkai sudah tercetak di file foto: jangan tambah kertas polaroid lagi di layar.
     document.querySelectorAll('.polaroid-review, .polaroid-saved').forEach(function (f) { f.classList.add('is-baked'); });
   }
@@ -724,7 +820,22 @@
   /* Service worker: menyimpan file aplikasi di HP agar bisa dibuka ulang saat sinyal buruk.
    * Hanya di HTTPS / localhost (tidak berlaku saat dibuka sebagai file lokal). */
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    // Versi lama di HP tamu otomatis diganti: begitu versi baru aktif, halaman dimuat ulang SEKALI
+    // (hanya di layar yang aman; di tengah memotret ditunda sampai tamu kembali ke beranda).
+    var hadController = !!navigator.serviceWorker.controller, swReload = false;
+    var SAFE = { landing: 1, countdown: 1, hub: 1, presets: 1, preset: 1, help: 1, album: 1, reveal: 1, message: 1 };
+    var reloadWhenSafe = function () {
+      if (!swReload) return;
+      if (SAFE[state.screen] && !state.busy) location.reload();
+      else setTimeout(reloadWhenSafe, 1500);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || swReload) return;
+      swReload = true; reloadWhenSafe();
+    });
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').then(function (reg) { if (reg.update) reg.update(); }).catch(function () {});
+    });
   }
 
   // Untuk pengujian otomatis saja (tidak memengaruhi tamu).
