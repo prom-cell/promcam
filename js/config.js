@@ -6,21 +6,17 @@ window.PROMCAM_CONFIG = {
   // ---- Teks ----
   eventName: 'Prom Night 2026',
   invitation: 'You’re invited',
-  eventDate: '2 – 3 November 2026',
   tagline: 'Tangkap momen terbaik di malam yang tak terlupakan.',
   closingLine: 'Satu malam. Seribu cerita.',
   polaroidCaption: 'Prom Night 2026 ♡',   // tulisan di polaroid layar (bila bingkai foto 'none')
   thanksLine: 'Terima kasih sudah menjadi bagian dari malam ini ♡',
 
-  // ---- Jadwal (WIB, format waktu lengkap dengan +07:00) ----
-  // Sebelum eventStart tamu melihat hitung mundur; kamera terbuka otomatis saat waktunya tiba.
-  // Setelah eventEnd kamera ditutup, tetapi roll tamu tetap bisa dibuka dan disimpan.
-  // Jendela yang sama juga dicek server di Tahap 4.
-  eventStart: '2026-11-02T17:00:00+07:00',
-  eventEnd: '2026-11-03T04:00:00+07:00',
-  // Reveal: kapan album panitia dibuka untuk tamu. albumUrl diisi panitia setelah kurasi;
-  // selama kosong, tombol "Lihat Album" menampilkan layar "Album akan dibuka".
-  revealAt: '2026-11-03T12:00:00+07:00',
+  // ---- Jadwal (WIB) ----
+  // Tanggal acara diatur di SERVER: Apps Script → Setelan Project → Properti Skrip → TANGGAL_MULAI (format 2026-11-02).
+  // Dari tanggal itu: acara 17.00 – 04.00 WIB keesokan harinya, album dibuka 12.00 keesokan harinya.
+  // Nilai di bawah hanya cadangan bila server belum terjangkau (HP juga mengingat tanggal terakhir dari server).
+  tanggalMulai: '2026-11-02',
+  // albumUrl diisi panitia setelah kurasi; selama kosong, tombol "Lihat Album" menampilkan layar "Album akan dibuka".
   albumUrl: '',
   // Di luar jam acara (sebelum eventStart & sesudah eventEnd) kamera TETAP bisa dipakai sebagai uji coba:
   // foto masuk folder 03_Karantina dan TIDAK mengurangi jatah rollSize. Di jam acara foto masuk album acara.

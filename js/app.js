@@ -55,7 +55,6 @@
   function setText(id, text) { if ($(id)) $(id).textContent = text; }
   document.title = 'PromCam, ' + CFG.eventName;
   setText('landing-invite', CFG.invitation);
-  setText('landing-date', CFG.eventDate);
   setText('landing-tagline', CFG.tagline);
   setText('landing-closing', CFG.closingLine);
   setText('saved-caption', CFG.polaroidCaption);
@@ -63,7 +62,25 @@
 
   /* ---------- Jadwal acara & hitung mundur (WIB) ---------- */
   var TZ = 'Asia/Jakarta';
-  var START = Date.parse(CFG.eventStart), END = Date.parse(CFG.eventEnd), REVEAL = Date.parse(CFG.revealAt);
+  // Jadwal dari SATU tanggal mulai (TANGGAL_MULAI di server, cadangan: config/HP): acara 17.00 – 04.00 WIB,
+  // album dibuka 12.00 keesokan harinya. eventStart/eventEnd/revealAt di config (bila diisi) menimpa, untuk pengujian.
+  var START, END, REVEAL, TGL_KEY = 'promcam.tgl';
+  function validTgl(d) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d || ''))) return false;
+    var t = Date.parse(d + 'T17:00:00+07:00');
+    return !isNaN(t) && new Date(t + 7 * 3600e3).toISOString().slice(0, 10) === d;
+  }
+  function setSchedule(tgl) {
+    var s = Date.parse(tgl + 'T17:00:00+07:00');
+    START = CFG.eventStart ? Date.parse(CFG.eventStart) : s;
+    END = CFG.eventEnd ? Date.parse(CFG.eventEnd) : s + 11 * 3600e3;
+    REVEAL = CFG.revealAt ? Date.parse(CFG.revealAt) : s + 19 * 3600e3;
+  }
+  var TGL = (function () {
+    try { var v = localStorage.getItem(TGL_KEY); if (validTgl(v)) return v; } catch (e) { /* tanpa penyimpanan */ }
+    return validTgl(CFG.tanggalMulai) ? CFG.tanggalMulai : '2026-11-02';
+  })();
+  setSchedule(TGL);
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function fmtDate(t) { return new Date(t).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ }); }
   function fmtTime(t) { return new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }).replace(':', '.') + ' WIB'; }
@@ -88,11 +105,31 @@
   function canShoot() { return phase() === 'live' || TRIAL; }
   function shotMode() { return phase() === 'live' ? 'acara' : 'uji'; }
 
-  setText('reveal-date', fmtDate(REVEAL));
-  setText('reveal-time', 'Pukul ' + fmtTime(REVEAL));
-  setText('help-reveal', fmtDate(REVEAL) + ', pukul ' + fmtTime(REVEAL));
-  setText('cd-date', fmtDate(START) + ' · ' + fmtTime(START));
-  setText('hub-reveal-date', fmtDate(REVEAL) + ' · ' + fmtTime(REVEAL));
+  function dateRange(a, b) {
+    var o = { timeZone: TZ }, da = new Date(a), db = new Date(b);
+    var d1 = da.toLocaleDateString('id-ID', Object.assign({ day: 'numeric' }, o)), d2 = db.toLocaleDateString('id-ID', Object.assign({ day: 'numeric' }, o));
+    var m1 = da.toLocaleDateString('id-ID', Object.assign({ month: 'long' }, o)), m2 = db.toLocaleDateString('id-ID', Object.assign({ month: 'long' }, o));
+    var y = db.toLocaleDateString('id-ID', Object.assign({ year: 'numeric' }, o));
+    return m1 === m2 ? d1 + ' – ' + d2 + ' ' + m2 + ' ' + y : d1 + ' ' + m1 + ' – ' + d2 + ' ' + m2 + ' ' + y;
+  }
+  function applySchedule() {
+    setText('landing-date', CFG.eventDate || dateRange(START, END - 1));
+    setText('reveal-date', fmtDate(REVEAL));
+    setText('reveal-time', 'Pukul ' + fmtTime(REVEAL));
+    setText('help-reveal', fmtDate(REVEAL) + ', pukul ' + fmtTime(REVEAL));
+    setText('cd-date', fmtDate(START) + ' · ' + fmtTime(START));
+    setText('hub-reveal-date', fmtDate(REVEAL) + ' · ' + fmtTime(REVEAL));
+  }
+  applySchedule();
+  // Tanggal terbaru dari server (diubah panitia di Apps Script → Properti Skrip → TANGGAL_MULAI).
+  if (CFG.endpoint && window.fetch) {
+    fetch(CFG.endpoint).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !validTgl(j.tanggal) || j.tanggal === TGL) return;
+      TGL = j.tanggal;
+      try { localStorage.setItem(TGL_KEY, TGL); } catch (e) { /* tanpa penyimpanan */ }
+      setSchedule(TGL); applySchedule(); // layar hitung mundur/beranda ikut berubah pada detik berikutnya
+    }).catch(function () { /* offline: pakai tanggal tersimpan */ });
+  }
   $('btn-cd-test').hidden = !TRIAL;
   if (!TRIAL) setText('cd-note', 'Kamera terbuka otomatis begitu waktunya tiba.');
   ['cd-title', 'hub-title'].forEach(function (id) { setText(id, CFG.eventName); });
@@ -872,5 +909,5 @@
   }
 
   // Untuk pengujian otomatis saja (tidak memengaruhi tamu).
-  window.__promcam = { state: state, go: go };
+  window.__promcam = { state: state, go: go, phase: phase };
 })();
